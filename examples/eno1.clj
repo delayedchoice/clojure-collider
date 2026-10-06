@@ -84,8 +84,9 @@
 (let [f (server/with-rendering ["/tmp/eno1.aiff" :sr 44100 :pad total-dur]
           ;; everything mixes here; the limiter guarantees reproducible
           ;; headroom no matter how the transcription grows
-          ;; first private bus: 0-15 are hardware (8 out + 8 in)
-          (def mixbus (:busnum (bus/bus-audio server/*s* :chanls 2 :busnum 16)))
+          ;; first private bus (0-15 are hardware: 8 out + 8 in); nothing
+          ;; else allocates, so a plain constant beats a pinned allocator call
+          (def mixbus 16)
           (def/defsynth :eno [note 60 amp 0.5 out 0]
             (let [fr (ops/midicps note)
                   env (e/env-gen:kr (e/env [0 1 0] [0.4 18.0]) :act :free)
