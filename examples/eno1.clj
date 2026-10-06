@@ -1,6 +1,8 @@
 ;; "An Ending (Ascent)" (Eno) bars 1-26 + repeat 22-26, from the
 ;; Annemie Van Riel piano transcription (Finale PDF in this directory).
-;; 31 bars x 4 beats @ beat=0.5s (q=120) = 62s. Verified against MP3 chroma.
+;; 26 bars x 4 beats @ beat=2.5s (q=24) = 260s of music from 4s.
+;; Chord changes every ~5.5s in the recording match the half-bar grid.
+;; The scores 22-26 repeat (~50s) is not observed in the recording: omitted.
 ;; Run: clojure -M examples/eno1.clj (NRT render)
 (require '[clojure-collider.server.server :as server]
          '[clojure-collider.synth.def :as def]
@@ -15,7 +17,7 @@
          '[clojure-collider.bus :as bus]
          '[clojure-collider.ugens.in-out :as io])
 
-(def beat 0.5)
+(def beat 2.5)
 (def bar (* 4 beat))
 
 ;; [bar-index beat-offset [midis] amp] — bar-index 0-based over the PLAYED
@@ -75,9 +77,9 @@
    ;; 26: G-C; Ab-Eb
    [[0 [39 48 67 72] 0.55] [2 [44 51 70 77] 0.55]]])
 
-(def play-seq (concat (take 21 bars) (drop 21 bars) (drop 21 bars)))
+(def play-seq bars)
 (def start-at 4.0)
-(def total-dur (+ start-at (* 31 bar) 4.0))
+(def total-dur (+ start-at (* 26 bar) 15.0))
 
 (let [f (server/with-rendering ["/tmp/eno1.aiff" :sr 44100 :pad total-dur]
           ;; everything mixes here; the limiter guarantees reproducible
@@ -86,7 +88,7 @@
           (def mixbus (:busnum (bus/bus-audio server/*s* :chanls 2 :busnum 16)))
           (def/defsynth :eno [note 60 amp 0.5 out 0]
             (let [fr (ops/midicps note)
-                  env (e/env-gen:kr (e/env [0 1 0] [0.09 3.8]) :act :free)
+                  env (e/env-gen:kr (e/env [0 1 0] [0.4 18.0]) :act :free)
                   sig (ops/+ (osc/sin-osc:ar fr 0 amp)
                              (osc/sin-osc:ar (ops/* fr 2.0) 0 (ops/* amp 0.22))
                              (osc/sin-osc:ar (ops/* fr 3.0) 0 (ops/* amp 0.06)))]
