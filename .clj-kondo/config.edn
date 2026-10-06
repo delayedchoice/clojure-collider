@@ -1,0 +1,15 @@
+{:linters {:unresolved-symbol {:exclude [(clojure-collider.synth.def/defsynth)
+                                        (clojure-collider.synth.def/synth)
+                                        (clojure-collider.synth.def/play)]}
+           :unused-namespace {:exclude []}}
+ ;; Facade namespaces re-export via import-vars (runtime `var` needs the
+ ;; namespaces loaded): their requires are load-bearing, never unused.
+ :config-in-ns {clojure-collider.core {:linters {:unused-namespace {:level :off}}}
+                clojure-collider.ugens {:linters {:unused-namespace {:level :off}}}}
+ :hooks {:analyze-call {clojure-collider.core/import-vars hooks.import-vars/import-vars
+                        clojure-collider.ugens/import-vars hooks.import-vars/import-vars
+                        clojure-collider.synth.operators/def-unary-op hooks.defop/def-unary-op
+                        clojure-collider.synth.operators/def-binary-op hooks.defop/def-binary-op
+                        clojure-collider.synth.control/with-controls hooks.ports/with-controls
+                        clojure-collider.core/with-controls hooks.ports/with-controls
+                        clojure-collider.server.server/with-node hooks.ports/with-node}}}

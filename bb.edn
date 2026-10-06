@@ -1,0 +1,3 @@
+{:tasks {check {:doc "kondo + tests"
+                 :task (do (clojure "-M:kondo")
+                           (clojure "-M:test"))}}}

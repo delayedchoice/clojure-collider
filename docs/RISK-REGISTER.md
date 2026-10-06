@@ -1,0 +1,20 @@
+# Risk Register
+
+| # | Risk | Likelihood | Impact | Owner | Mitigation | Contingency |
+|---|---|---|---|---|---|---|
+| R1 | `encode-synthdef` byte mismatch (off-by-one, endianness, float32) | High | Blocker — SC rejects def | synth/synthdef | Golden-file SHA tests from Phase 2; fuzz vs CL | Diff bytes with `hexdump -C`, add per-field unit tests |
+| R2 | Rate lattice bug (`check-same-rate-as-first-input`, `:audio` vs `:control`) | Med | Silent wrong sound / SC error | synth/ugen | Port `check-fn` verbatim; property tests `rate` propagation | Add `assert` rate checks gated by `*check-rates?*` dynamic var |
+| R3 | Multi-channel expansion divergence (`multinew`/`lst-operation`) | Med | Wrong channel count / `unbubble` mishap | synth/ugen | Table tests: `sin-osc-ar [440 441]` etc. compare CL vs Clojure outputs | Isolate `multinew` in pure ns, test with mocked CTOR |
+| R4 | Scheduler jitter / `sched-ahead` drift | Med | Timing glitches in `at`/`callback`/`clock-*` | server/scheduler | Use `System/nanoTime` monotonic; measure jitter in test with `tempo-clock` | Allow `sched-ahead` tuning, document; add `clock-sync` resync thread |
+| R5 | UDP size limit: large synthdefs via `/d_recv` drop | Med | Boot failure for big defs | osc/transmit + synth/synthdef | Keep CL fallback: if `> max-datagram` → `write-synthdef-file` + `/d_load` | Log warning + retry via file; test with synthetic 64k def |
+| R6 | `reblock`/`resample` v3-only path mishandled | Low | `assert` false on server | synth/synthdef | Keep `*synthdef-version*` var (default 2), guard `reblock`/`resample` | Tests for v2 vs v3 header bytes |
+| R7 | Buffer/bus races (concurrent alloc) | Med | Duplicate bufnum/busnum | buffer/bus | `ReentrantLock` per-server; `find-consecutive-nil` under lock | Add `with-lock` helpers + concurrency test |
+| R8 | `sync` deadlock (reply thread vs tempo-clock thread) | Med | Hang | server/server | Port CL's guard: no-op if called from reply/clock thread (`find current-thread`) | `with-async` escape hatch; timeout on future with warn |
+| R9 | UGen bulk port scale (37 files, 600 fns) | High (effort) | Long tail, bit-rot | ugens/* | Auto-transpile `defugen` via `bb scripts/transpile-ugens.clj` (edamame) | Manual fix only for `EnvGen`/`FFT`/`Demand` custom forms |
+| R10 | Naming break breaks user snippets | High | Confusion | core/ugens | Provide both `sin-osc-ar` and `(sin-osc :ar …)`; alias map + `DECISIONS.md` | `clojure.spec` lint for unknown ugen, helpful error suggests alias |
+| R11 | Platform `pthread_setschedparam` not on JVM | Low | No RT priority, maybe higher latency | scheduler | No-op + `Thread/setPriority` best-effort; document | Measure; if jitter high, suggest `chrt` wrapper for `scsynth` process only |
+| R12 | License / Clojars publish confusion | Low | Legal | root | Keep `LICENCE` 0-clause MIT / Public Domain same as upstream | `build.clj` pom `:licenses` mirrors upstream |
+| R13 | Sum3/4 input order follows SBCL unstable `sort` (ties reversed) | Low | Byte drift vs other CLs | synth/synthdef | `sort-by-rate-desc` pins observed SBCL 2.2.9 order; goldens cover it | Regen goldens per impl; order is audio-irrelevant (addition commutes) |
+| R14 | Fusion skips zero-valued number inputs (upstream folds via `add`) | Low | Byte drift in exotic zero-arg sums | synth/synthdef | Construction-time simplification preempts most cases; documented | Extend `fuse-sums` with add-fallback if a golden hits it |
+| R15 | Shared-test-server client slots (64 max, `/notify` leak → `too many users`) | Med | Flaky live tests | server tests | `try/finally` quits (`/notify 0`) in every live test; private boot where possible | Restart shared `scsynth` with identical args |
+| R16 | Width-first topo not enforced (pv-chain/local-buf feedback order) | Med | Wrong audio / SC unit-order error on FFT chains | synth/synthdef | Units carry width-first-antecedents but nothing pushes producers; construction order suffices for linear chains | Live FFT-chain check; port upstream schedule width-first pass if it breaks |
