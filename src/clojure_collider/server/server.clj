@@ -45,8 +45,9 @@
 
 ;; -- record ------------------------------------------------------------------
 (defrecord NrtServer
-  [name options streams id group-id default-group node-proxy-table
-   node-watcher boot? buffers scheduler tempo-clock latency])
+  [name options streams lock id group-id default-group node-proxy-table
+   node-watcher boot? buffers audio-buses control-buses
+   scheduler tempo-clock latency])
 
 (defmethod print-method NrtServer [s ^java.io.Writer w]
   (.write w (str "#<nrt-server " (:name s) ">")))
@@ -109,11 +110,16 @@
   (let [options (or options (opts/make-server-options))
         s (map->NrtServer
              {:name "NRTSynth" :options options :streams (atom [])
+              :lock (ReentrantLock.)
               :id (atom [999]) :group-id (atom 1) :default-group (atom nil)
               :node-proxy-table (atom {}) :node-watcher (atom #{})
-              :boot? (atom true) :buffers (atom []) :scheduler (atom nil)
+              :boot? (atom true) :buffers (atom [])
+              :audio-buses (atom []) :control-buses (atom [])
+              :scheduler (atom nil)
               :tempo-clock (atom nil) :latency 0.0})]
     (reset! (:buffers s) (vec (repeat (:num-sample-buffers options) nil)))
+    (reset! (:audio-buses s) (vec (repeat (:num-audio-bus options) nil)))
+    (reset! (:control-buses s) (vec (repeat (:num-control-bus options) nil)))
     (reset! (:scheduler s) (sched/make-scheduler "NRTSynth" s))
     (reset! (:tempo-clock s) (sched/make-tempo-clock "NRTSynth" s
                                                     :bpm (double bpm)

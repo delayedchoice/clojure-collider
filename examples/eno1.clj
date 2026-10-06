@@ -11,6 +11,8 @@
          '[clojure-collider.ugens.filter :as flt]
          '[clojure-collider.ugens.line :as ln]
          '[clojure-collider.ugens.trig :as trg]
+         '[clojure-collider.ugens.compander :as lim]
+         '[clojure-collider.bus :as bus]
          '[clojure-collider.ugens.in-out :as io])
 
 (def beat 0.5)
@@ -78,16 +80,25 @@
 (def total-dur (+ start-at (* 31 bar) 4.0))
 
 (let [f (server/with-rendering ["/tmp/eno1.aiff" :sr 44100 :pad total-dur]
-          (def/defsynth :eno [note 60 amp 0.5]
+          ;; everything mixes here; the limiter guarantees reproducible
+          ;; headroom no matter how the transcription grows
+          ;; first private bus: 0-15 are hardware (8 out + 8 in)
+          (def mixbus (:busnum (bus/bus-audio server/*s* :chanls 2 :busnum 16)))
+          (def/defsynth :eno [note 60 amp 0.5 out 0]
             (let [fr (ops/midicps note)
-                  env (e/env-gen:kr (e/env [0 1 0] [0.005 2.4]) :act :free)
+                  env (e/env-gen:kr (e/env [0 1 0] [0.09 3.8]) :act :free)
                   sig (ops/+ (osc/sin-osc:ar fr 0 amp)
-                             (osc/sin-osc:ar (ops/* fr 2.0) 0 (ops/* amp 0.3))
-                             (osc/sin-osc:ar (ops/* fr 3.0) 0 (ops/* amp 0.1)))]
-              (io/out:ar 0 [(fv/freeverb:ar (ops/* env sig)
-                                            :mix 0.35 :room 0.85 :damp 0.3)
-                            (fv/freeverb:ar (ops/* env sig)
-                                            :mix 0.35 :room 0.85 :damp 0.3)])))
+                             (osc/sin-osc:ar (ops/* fr 2.0) 0 (ops/* amp 0.22))
+                             (osc/sin-osc:ar (ops/* fr 3.0) 0 (ops/* amp 0.06)))]
+              (io/out:ar out [(fv/freeverb:ar (ops/* env sig)
+                                              :mix 0.35 :room 0.85 :damp 0.3)
+                              (fv/freeverb:ar (ops/* env sig)
+                                              :mix 0.35 :room 0.85 :damp 0.3)])))
+          (def/defsynth :master [bus 16]
+            (let [sig (io/in:ar bus 2)]
+              ;; 0.7 headroom: worst-case 6-voice stack measured ~1.0; limiter is backstop
+            (let [sig (ops/* sig 0.7)]
+              (io/out:ar 0 (lim/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
           ;; sustained pad wash under the piano (the recording's bed)
           (def/play
             (let [t (ln/line:kr 0 1 total-dur)
@@ -96,12 +107,18 @@
                           (flt/lpf:ar (ops/+ (osc/saw:ar (ops/midicps m))
                                              (osc/saw:ar (ops/* (ops/midicps m) 1.004)))
                                       600))]
-              (io/out:ar 0 [(ops/* 0.05 g (apply ops/+ (map voice [39 44 46 51])))
-                            (ops/* 0.05 g (apply ops/+ (map voice [39 44 46 51])))])))
+              (io/out:ar mixbus [(ops/* 0.035 g (apply ops/+ (map voice [39 44 46 51])))
+                                 (ops/* 0.035 g (apply ops/+ (map voice [39 44 46 51])))]))
+            :out-bus mixbus)
+          ;; equal-loudness chords: each event's notes share its amp budget
           (doseq [[bi events] (map-indexed vector play-seq)
                   [b midis amp] events
                   m midis]
             (when (pos? amp)
               (server/at (+ start-at (* bi bar) (* b beat))
-                         (def/synth :eno :note m :amp amp)))))]
+                         (def/synth :eno :note m
+                                    :amp (ops// amp (count midis))
+                                    :out mixbus))))
+          ;; limiter last so it hears the full mix
+          (def/synth :master :bus mixbus :pos :tail))]
   (println :rendered f))
