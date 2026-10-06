@@ -87,7 +87,7 @@
           ;; first private bus (0-15 are hardware: 8 out + 8 in); nothing
           ;; else allocates, so a plain constant beats a pinned allocator call
           (def mixbus 16)
-          (sdef/defsynth :eno [note 60 amp 0.5 out 0]
+          (sdef/defsynth :felt-piano [note 60 amp 0.5 out 0]
             (let [fr (ops/midicps note)
                   env (e/env-gen:kr (e/env [0 1 0] [0.4 18.0]) :act :free)
                   sig (ops/+ (osc/sin-osc:ar fr 0 amp)
@@ -97,7 +97,7 @@
                                               :mix 0.35 :room 0.85 :damp 0.3)
                               (fv/freeverb:ar (ops/* env sig)
                                               :mix 0.35 :room 0.85 :damp 0.3)])))
-          (sdef/defsynth :master [bus 16]
+          (sdef/defsynth :mix-limiter [bus 16]
             (let [sig (io/in:ar bus 2)]
               ;; 0.7 headroom: worst-case 6-voice stack measured ~1.0; limiter is backstop
             (let [sig (ops/* sig 0.7)]
@@ -119,9 +119,9 @@
                   m midis]
             (when (pos? amp)
               (server/at (+ start-at (* bi bar) (* b beat))
-                         (sdef/synth :eno :note m
+                         (sdef/synth :felt-piano :note m
                                     :amp (ops// amp (count midis))
                                     :out mixbus))))
           ;; limiter last so it hears the full mix
-          (sdef/synth :master :bus mixbus :pos :tail))]
+          (sdef/synth :mix-limiter :bus mixbus :pos :tail))]
   (println :rendered f))
