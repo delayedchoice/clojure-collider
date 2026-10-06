@@ -5,7 +5,7 @@
 ;; The scores 22-26 repeat (~50s) is not observed in the recording: omitted.
 ;; Run: clojure -M examples/eno1.clj (NRT render)
 (require '[clojure-collider.server.server :as server]
-         '[clojure-collider.synth.def :as def]
+         '[clojure-collider.synth.def :as sdef]
          '[clojure-collider.synth.operators :as ops]
          '[clojure-collider.ugens.osc :as osc]
          '[clojure-collider.ugens.env-gen :as e]
@@ -87,7 +87,7 @@
           ;; first private bus (0-15 are hardware: 8 out + 8 in); nothing
           ;; else allocates, so a plain constant beats a pinned allocator call
           (def mixbus 16)
-          (def/defsynth :eno [note 60 amp 0.5 out 0]
+          (sdef/defsynth :eno [note 60 amp 0.5 out 0]
             (let [fr (ops/midicps note)
                   env (e/env-gen:kr (e/env [0 1 0] [0.4 18.0]) :act :free)
                   sig (ops/+ (osc/sin-osc:ar fr 0 amp)
@@ -97,13 +97,13 @@
                                               :mix 0.35 :room 0.85 :damp 0.3)
                               (fv/freeverb:ar (ops/* env sig)
                                               :mix 0.35 :room 0.85 :damp 0.3)])))
-          (def/defsynth :master [bus 16]
+          (sdef/defsynth :master [bus 16]
             (let [sig (io/in:ar bus 2)]
               ;; 0.7 headroom: worst-case 6-voice stack measured ~1.0; limiter is backstop
             (let [sig (ops/* sig 0.7)]
               (io/out:ar 0 (lim/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
           ;; sustained pad wash under the piano (the recording's bed)
-          (def/play
+          (sdef/play
             (let [t (ln/line:kr 0 1 total-dur)
                   g (ln/lin-lin:kr (trg/clip:kr t 0.0 0.3) 0.0 0.3 0 1)
                   voice (fn [m]
@@ -119,9 +119,9 @@
                   m midis]
             (when (pos? amp)
               (server/at (+ start-at (* bi bar) (* b beat))
-                         (def/synth :eno :note m
+                         (sdef/synth :eno :note m
                                     :amp (ops// amp (count midis))
                                     :out mixbus))))
           ;; limiter last so it hears the full mix
-          (def/synth :master :bus mixbus :pos :tail))]
+          (sdef/synth :master :bus mixbus :pos :tail))]
   (println :rendered f))
