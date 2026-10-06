@@ -15,7 +15,7 @@
             [clojure-collider.synth.synthdef :as synthdef]
             [clojure-collider.synth.control :as ctl]
             [clojure-collider.synth.convert :as conv]
-            [clojure-collider.synth.def :as def]
+            [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [clojure-collider.ugens.osc :as uosc]
             [clojure-collider.ugens.in-out :as uio]
@@ -79,7 +79,7 @@
   with-controls named-control kr make-control normalize-params)
 (import-vars clojure-collider.synth.convert
   convert-code synthdef-equivalent-function set-synthdef-equivalent!)
-(import-vars clojure-collider.synth.def
+(import-vars clojure-collider.synth.sdef
   defsynth play synth synthdef-metadata set-synthdef-metadata!
   recv-synthdef load-synthdef proxy proxy-ctrl get-controls-list proxy-key-name)
 

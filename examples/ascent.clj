@@ -4,7 +4,7 @@
 ;; measured RMS arc; everything exits by 244s. NRT render (~266s).
 ;; Run: clojure -M examples/ascent.clj
 (require '[clojure-collider.server.server :as server]
-         '[clojure-collider.synth.def :as def]
+         '[clojure-collider.synth.sdef :as sdef]
          '[clojure-collider.synth.operators :as ops]
          '[clojure-collider.ugens.osc :as osc]
          '[clojure-collider.ugens.filter :as flt]
@@ -38,7 +38,7 @@
     (ops/* rin rout)))
 
 (let [f (server/with-rendering ["/tmp/ascent-homage.aiff" :sr 44100 :pad dur]
-          (def/play
+          (sdef/play
             (let [t (ln/line:kr 0 1 dur)
                   arc (e/env-gen:kr (e/env arc-levels arc-times) :act :no-action)
                   cutoff (ops/+ 250 (ops/* 2000 arc))

@@ -3,7 +3,7 @@
    The control synth is a fade-gated play graph ending in XOut, placed
    after group 1; later adjustments go through ctrl."
   (:require [clojure-collider.server.server :as server]
-            [clojure-collider.synth.def :as def]
+            [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.control :as ctl]
             [clojure-collider.synth.operators :as ops]
             [clojure-collider.ugens.in-out :as io]
@@ -28,8 +28,8 @@
         (let [num-out (:num-output-bus (:options server))]
           (reset! (:volume-control-synth server)
                   (binding [server/*s* server
-                            def/*temp-synth-name* (str "volume-amp-control-" num-out)]
-                    (def/play
+                            sdef/*temp-synth-name* (str "volume-amp-control-" num-out)]
+                    (sdef/play
                       (ctl/with-controls ((amp amp) (gate 1))
                         (io/x-out:ar 0 (e/linen:kr gate 0.01 1.0 0.05 :act :free)
                                      (ops/* (io/in:ar 0 num-out)

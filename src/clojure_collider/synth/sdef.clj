@@ -1,4 +1,4 @@
-(ns clojure-collider.synth.def
+(ns clojure-collider.synth.sdef
   "High-level DSL: defsynth/synth/play/proxy. Mirrors the matching
    synthdef.lisp region (ll.397-567): metadata store, *synth-definition-mode*,
    recv/load-synthdef, defsynth macro, synth fn, play macro, proxy/proxy-ctrl.

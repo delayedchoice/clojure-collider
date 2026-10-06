@@ -5,7 +5,7 @@
 ;; The scores 22-26 repeat (~50s) is not observed in the recording: omitted.
 ;; Run: clojure -M examples/eno1.clj (NRT render)
 (require '[clojure-collider.server.server :as server]
-         '[clojure-collider.synth.def :as sdef]
+         '[clojure-collider.synth.sdef :as sdef]
          '[clojure-collider.synth.operators :as ops]
          '[clojure-collider.ugens.osc :as osc]
          '[clojure-collider.ugens.env-gen :as e]

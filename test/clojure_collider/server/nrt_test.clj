@@ -2,7 +2,7 @@
   (:require [clojure.test :refer [deftest is]]
             [clojure.java.io :as io]
             [clojure-collider.server.server :as server]
-            [clojure-collider.synth.def :as def]
+            [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.ugens.osc :as uosc]))
 
 (deftest streams-collect
@@ -24,7 +24,7 @@
 (deftest render-aiff
   (let [out (try
               (server/with-rendering ["/tmp/nrt-test.aiff" :sr 44100 :pad 0.5]
-                (def/play (uosc/sin-osc:ar 440 0 0.2)))
+                (sdef/play (uosc/sin-osc:ar 440 0 0.2)))
               (catch Exception e (println "SKIP nrt render:" (.getMessage e)) nil))]
     (when out
       (try

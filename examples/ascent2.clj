@@ -5,7 +5,7 @@
 ;; real contrast (arc^1.5), and sparse pentatonic plucks in the second half.
 ;; Run: clojure -M examples/ascent2.clj (NRT render, ~266s)
 (require '[clojure-collider.server.server :as server]
-         '[clojure-collider.synth.def :as def]
+         '[clojure-collider.synth.sdef :as sdef]
          '[clojure-collider.synth.operators :as ops]
          '[clojure-collider.ugens.osc :as osc]
          '[clojure-collider.ugens.filter :as flt]
@@ -52,12 +52,12 @@
 
 (let [f (server/with-rendering ["/tmp/ascent2.aiff" :sr 44100 :pad dur]
           ;; pluck voice for the arp
-          (def/defsynth :pluck [note 63]
+          (sdef/defsynth :pluck [note 63]
             (let [env (e/env-gen:kr (e/env [0 1 0] [0.01 2.5]) :act :free)
                   sig (ops/+ (osc/sin-osc:ar (ops/midicps note) 0 0.12)
                              (osc/sin-osc:ar (ops/* (ops/midicps note) 2.0) 0 0.04))]
               (io/out:ar 0 [sig sig])))
-          (def/play
+          (sdef/play
             (let [t (ln/line:kr 0 1 dur)
                   arc (e/env-gen:kr (e/env arc-levels arc-times) :act :no-action)
                   dyn (ops/+ 0.25 (ops/* 0.75 arc))
@@ -76,5 +76,5 @@
               (io/out:ar 0 [(ops/* 0.26 dyn sig) (ops/* 0.26 dyn sig)])))
           ;; schedule the arp (messages timestamped into the score)
           (doseq [[m at] arp]
-            (server/at at (def/synth :pluck :note m))))]
+            (server/at at (sdef/synth :pluck :note m))))]
   (println :rendered f))

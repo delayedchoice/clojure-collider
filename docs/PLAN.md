@@ -173,7 +173,7 @@ Must be byte-identical to CL's `encode-synthdef` (version 2 default). Use `DataO
 
 **Goal:** End-to-end musical examples from README work.
 
-- `synth.def` (`defsynth`, `play`, `proxy`/`proxy-ctrl`, `with-rendering` for NRT file render).
+- `synth.sdef` (`defsynth`, `play`, `proxy`/`proxy-ctrl`, `with-rendering` for NRT file render).
 - `server.node` (`node`, `group`, `synth`, `ctrl`, `map-bus`, `move-node`, `free`/`release`/`is-playing-p`, `on-free`, `group-free-all`/`server-free-all`/`stop`).
 - Tests: NRT render (`with-rendering` writes `foo.aiff`, assert non-zero file + header `FORM`).
 

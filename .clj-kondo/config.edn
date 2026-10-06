@@ -1,6 +1,6 @@
-{:linters {:unresolved-symbol {:exclude [(clojure-collider.synth.def/defsynth)
-                                        (clojure-collider.synth.def/synth)
-                                        (clojure-collider.synth.def/play)]}
+{:linters {:unresolved-symbol {:exclude [(clojure-collider.synth.sdef/defsynth)
+                                        (clojure-collider.synth.sdef/synth)
+                                        (clojure-collider.synth.sdef/play)]}
            :unused-namespace {:exclude []}}
  ;; Facade namespaces re-export via import-vars (runtime `var` needs the
  ;; namespaces loaded): their requires are load-bearing, never unused.
