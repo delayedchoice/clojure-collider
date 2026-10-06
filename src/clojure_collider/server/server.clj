@@ -120,9 +120,24 @@
                                                     :timestamp-fn (constantly 0.0)))
     (swap! all-servers conj s)
     s))
-
 (def nrt-formats {:int16 "int16" :int24 "int24" :float "float" :double "double"})
 
+(def nrt-cmd-names
+  "Integer OSC command ids -> address strings. scsynth resolves int ids
+   over UDP and inside /d_recv completions, but NOT as top-level NRT score
+   messages ('Command not found'), so the score writer rewrites them."
+  {9 "/s_new" 15 "/n_set"})
+
+(defn nrt-score-message
+  "Rewrite one collected message for the score file (see nrt-cmd-names)."
+  [msg]
+  (let [addr (first msg)]
+    (if (integer? addr)
+      (if-let [named (get nrt-cmd-names (int addr))]
+        (assoc (vec msg) 0 named)
+        (throw (ex-info "NRT score cannot encode integer command id"
+                        {:id addr :message msg})))
+      msg)))
 (defmacro with-rendering
   "Render BODY offline: binds *s* to an NrtServer, collects the OSC score,
    writes <output>.osc, runs `scsynth -N`, deletes the score unless
@@ -155,7 +170,7 @@
                      ordered#)]
          (with-open [out# (io/output-stream osc-file#)]
            (doseq [[tt# msgs#] kept#]
-             (let [b# (enc/encode-bundle (vec msgs#) tt#)
+             (let [b# (enc/encode-bundle (mapv nrt-score-message msgs#) tt#)
                    n# (enc/encode-int32 (alength b#))]
                (.write out# ^java.io.OutputStream n#)
                (.write out# ^java.io.OutputStream b#)))))

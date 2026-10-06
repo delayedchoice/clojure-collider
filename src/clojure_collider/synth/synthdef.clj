@@ -20,7 +20,8 @@
   (let [fresh (fn [inp]
                 (if-let [p (pos (:synth-index inp))]
                   (nth sorted p)
-                  inp))]
+                  (throw (ex-info "stale ugen input survives optimize (fusion/DCE bug)"
+                                  {:input (select-keys inp [:name :synth-index])}))))]
     (assoc ugen :inputs
            (mapv (fn [inp]
                    (cond (ugen/ugen-like? inp)
@@ -61,8 +62,12 @@
   "Fixpoint (+ (+ A B) C) -> Sum3 / (+ Sum3 C) -> Sum4 (operators.lisp
    optimize-to-sum3/sum4). Records are values so the pass rebuilds the
    vector: the absorbed unit is dropped, refs to the outer add point at
-   the replacement. Zero-valued number inputs skip fusion (upstream folds
-   those through add instead; construction usually simplifies them away)."
+   the replacement. Refs match by :synth-index, NOT object identity: each
+   iteration's mapv copies consumers, so identities held across iterations
+   go stale (a 4-voice sum fused twice left the final mult pointing at a
+   dropped add -> 'buffer coloring error' from scsynth).
+   Zero-valued number inputs skip fusion (upstream folds those through add
+   instead; construction usually simplifies them away)."
   [children]
   (loop [kids (vec children)]
     (let [pos-of (into {} (keep-indexed (fn [p u]
@@ -128,12 +133,13 @@
               r (assoc (ugen/construct tag (ugen/rate (vec ins)) cls
                                        identity :bipolar 0 (vec args))
                        :synth-index fresh-idx)
-              kids2 (into [] (keep-indexed (fn [p u2] (when (not= p k) u2)) kids))]
+              kids2 (into [] (keep-indexed (fn [p u2] (when (not= p k) u2)) kids))
+              ui (:synth-index u)]
           (recur (mapv (fn [u2]
-                         (cond (identical? u2 u) r
+                         (cond (= (:synth-index u2) ui) r
                                :else (update u2 :inputs
                                              (fn [inps]
-                                               (mapv #(if (identical? % u) r %) inps)))))
+                                               (mapv #(if (= (canon-index %) ui) r %) inps)))))
                        kids2)))))))
 
 (defn build-synthdef [synthdef-atom]

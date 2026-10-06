@@ -7,6 +7,11 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
 ## Decided
+### 2026-10-06 — NRT int-address + Sum fusion bugs (ascent homage)
+- Integer OSC command ids (`9`=/s_new, `15`=/n_set) resolve over UDP and inside `/d_recv` completions but NOT as top-level NRT score messages (`Command not found`). Score writer rewrites via `nrt-cmd-names`; unknown ints throw loudly.
+- `fuse-sums` rewrote refs by object identity; each fixpoint pass copies consumers, so chains fusing 2+ times left the outer consumer pointing at a dropped add. scsynth: `buffer coloring error ... output: 11 LPF`. Refs now match by `:synth-index`; `rewrite-inputs` throws on unresolvable inputs instead of emitting bad bytes. Regression test `sum-fusion-keeps-consumers` fails pre-fix.
+- Homage `examples/ascent.clj`: Eb-area drone (7 detuned saws under the track's measured RMS arc). Render check: arc correlation 0.85, centroid 717 vs 781Hz.
+- Status: decided
 ### 2026-10-06 — v0.1.0 release + middleware deferral
 - Upstream `slynk/swank-extensions` are each ONE method (enriched `(synth ...)` arglist from synthdef metadata). No nREPL middleware ported: it would need nrepl+cider-nrepl deps and a live nREPL to verify, for editor-only value. CIDER users already get static arglists (all fns are real defns). Revisit if someone needs dynamic `synth` control display.
 - `:deploy` alias resolves (slipset/deps-deploy verified); actual Clojars push needs `CLOJARS_USERNAME`/`CLOJARS_PASSWORD` env (absent on this host).

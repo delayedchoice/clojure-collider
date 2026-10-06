@@ -21,6 +21,32 @@
     (let [a ugen/*synthdef*]
       (synthdef/build-synthdef a)
       @a)))
+(deftest sum-fusion-keeps-consumers
+  (testing "4-voice sum fuses twice (Sum3 then Sum4); the outer consumer
+   must follow to the replacement. Identity-based rewrite missed the
+   second hop (mapv copies invalidate identities) and scsynth rejected
+   the def ('buffer coloring error'). Refs now match by :synth-index."
+    (let [s (build "fuse4"
+                   (fn []
+                     (let [sig (apply ops/+
+                                      (map (fn [m] (flt/lpf:ar (osc/saw:ar (ops/midicps m)) 800))
+                                           [39 37 44 51]))]
+                       (io/out:ar 0 (ops/* 0.1 sig)))))
+          kids (:children s)
+          idxs (set (map :synth-index kids))
+          sum (first (filter #(= "Sum4" (:name %)) kids))
+          mults (filter #(and (= "BinaryOpUGen" (:name %))
+                              (= 2 (:special-index %))) kids)]
+        (is (some? sum) "Sum4 formed")
+        (is (= 1 (count mults)))
+        ;; post-build records are copies; compare by stable :synth-index
+        (is (some #(= (:synth-index sum) (:synth-index %))
+                  (:inputs (first mults)))
+            "consumer follows fusion to Sum4")
+        (is (every? #(contains? idxs (:synth-index %))
+                    (filter ugen/ugen-like? (mapcat :inputs kids)))
+            "no dangling inputs"))))
+
 (deftest topo-schedule-order
   (testing "CL stack discipline jumps newly-ready ahead: [A B C(dep A) D(dep B)]
    schedules as [A C B D]. Plain-ugen tails (C D) survive DCE, so the demo
