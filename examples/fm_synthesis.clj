@@ -20,7 +20,6 @@
          '[clojure-collider.ugens.noise :as noise]
          '[clojure-collider.ugens.poll :as poll]
          '[clojure-collider.ugens.pan :as pan])
-
 ;; pexprand = exponential-uniform draw over [lo hi]: uniform in log space.
 (defn- exprand [lo hi] (* lo (Math/pow (/ hi lo) (rand))))
 
