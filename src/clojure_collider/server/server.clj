@@ -408,11 +408,20 @@
     (throw (ex-info "server already running" {:server (:name server)})))
   (bootup-server-process server)
   (initialize-server-responder server)
-  (loop [tries 0]
-    (when (and (not (boot? server)) (< tries 30))
-      (send-message server "/sync" (int -1))
-      (Thread/sleep 30)
-      (recur (inc tries))))
+  ;; Upstream retries bootup while the scsynth thread is alive (server.lisp
+  ;; bootup recurses when the thread lives); we mirror that rather than the
+  ;; literal 30 tries, since CoreAudio device scans can exceed 0.9s. Cap at
+  ;; ~30s so a wedged-but-alive process still fails. No local process
+  ;; (:just-connect?) keeps a short leash.
+  (let [proc @(:sc-process server)
+        budget (if (nil? proc) 30 1000)]
+    (loop [tries 0]
+      (when (and (not (boot? server))
+                 (< tries budget)
+                 (or (nil? proc) (.isAlive ^Process proc)))
+        (send-message server "/sync" (int -1))
+        (Thread/sleep 30)
+        (recur (inc tries)))))
   (when-not (boot? server)
     (cleanup-server server)
     (throw (ex-info "server failed to boot" {:server (:name server)})))
