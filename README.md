@@ -49,8 +49,8 @@ clojure -M:deploy -m deps-deploy.deps-deploy deploy target/clojure-collider-0.1.
   (server/server-quit s))
 ```
 
-Or run the runnable scripts: `clojure -M examples/sine.clj`,
-`examples/synthdef.clj`, `examples/melody.clj` (each boots its own server).
+Or run the runnable examples: `clojure -M -m sine`,
+`synthdef`, `melody` (each boots its own server).
 
 ## API map
 
@@ -59,7 +59,7 @@ Or run the runnable scripts: `clojure -M examples/sine.clj`,
 | Everything (facade) | `clojure-collider.core` (require as `sc`) |
 | All 800+ UGen fns | `clojure-collider.ugens` |
 | Per-file UGens | `clojure-collider.ugens.osc`, `.filter`, `.delays`, … (one ns per upstream file; `sc3plugins.*`, `extensions.*`, `quarks.*` for extras) |
-| `defsynth`/`synth`/`play` | `clojure-collider.synth.def` |
+| `defsynth`/`synth`/`play` | `clojure-collider.synth.sdef` |
 | Server, nodes, sync | `clojure-collider.server.server` |
 | Scheduler, clocks | `clojure-collider.server.scheduler` |
 | Buffers, buses, volume | `clojure-collider.buffer`, `.bus`, `clojure-collider.volume` |

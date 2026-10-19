@@ -2,16 +2,17 @@
 ;; Analysis: Eb/Ab key area, energy arc rising 30s->3:30 then fade.
 ;; Seven detuned saw voices enter over 0-150s under the track's own
 ;; measured RMS arc; everything exits by 244s. NRT render (~266s).
-;; Run: clojure -M examples/ascent.clj
-(require '[clojure-collider.server.server :as server]
-         '[clojure-collider.synth.sdef :as sdef]
-         '[clojure-collider.synth.operators :as ops]
-         '[clojure-collider.ugens.osc :as osc]
-         '[clojure-collider.ugens.filter :as flt]
-         '[clojure-collider.ugens.env-gen :as e]
-         '[clojure-collider.ugens.line :as ln]
-         '[clojure-collider.ugens.trig :as trg]
-         '[clojure-collider.ugens.in-out :as io])
+;; Run: clojure -M -m ascent
+(ns ascent
+  (:require [clojure-collider.server.server :as server]
+            [clojure-collider.synth.sdef :as sdef]
+            [clojure-collider.synth.operators :as ops]
+            [clojure-collider.ugens.osc :as osc]
+            [clojure-collider.ugens.filter :as flt]
+            [clojure-collider.ugens.env-gen :as e]
+            [clojure-collider.ugens.line :as ln]
+            [clojure-collider.ugens.trig :as trg]
+            [clojure-collider.ugens.in-out :as io]))
 
 (def dur 266.0)
 (def exit-t 244.0)
@@ -37,21 +38,22 @@
                                      (/ exit-t dur) 1.0 0 1))]
     (ops/* rin rout)))
 
-(let [f (server/with-rendering ["/tmp/ascent-homage.aiff" :sr 44100 :pad dur]
-          (sdef/play
-            (let [t (ln/line:kr 0 1 dur)
-                  arc (e/env-gen:kr (e/env arc-levels arc-times) :act :no-action)
-                  cutoff (ops/+ 250 (ops/* 2000 arc))
-                  sig (apply ops/+
-                             (map-indexed
-                              (fn [i [m enter amp]]
-                                (let [fr (ops/midicps m)
-                                      lfo (ops/+ 0.85 (ops/* 0.15
-                                                             (osc/sin-osc:kr (+ 0.04 (* 0.01 i)))))]
-                                  (ops/* amp lfo (window t enter 12.0)
-                                         (flt/lpf:ar (ops/+ (osc/saw:ar fr)
-                                                            (osc/saw:ar (ops/* fr 1.003)))
-                                                     cutoff))))
-                              voices))]
-              (io/out:ar 0 [(ops/* 0.3 arc sig) (ops/* 0.3 arc sig)]))))]
-  (println :rendered f))
+(defn -main [& _]
+  (let [f (server/with-rendering ["/tmp/ascent-homage.aiff" :sr 44100 :pad dur]
+            (sdef/play
+              (let [t (ln/line:kr 0 1 dur)
+                    arc (e/env-gen:kr (e/env arc-levels arc-times) :act :no-action)
+                    cutoff (ops/+ 250 (ops/* 2000 arc))
+                    sig (apply ops/+
+                               (map-indexed
+                                (fn [i [m enter amp]]
+                                  (let [fr (ops/midicps m)
+                                        lfo (ops/+ 0.85 (ops/* 0.15
+                                                               (osc/sin-osc:kr (+ 0.04 (* 0.01 i)))))]
+                                    (ops/* amp lfo (window t enter 12.0)
+                                           (flt/lpf:ar (ops/+ (osc/saw:ar fr)
+                                                              (osc/saw:ar (ops/* fr 1.003)))
+                                                       cutoff))))
+                                voices))]
+                (io/out:ar 0 [(ops/* 0.3 arc sig) (ops/* 0.3 arc sig)]))))]
+    (println :rendered f)))
