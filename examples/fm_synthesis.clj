@@ -65,7 +65,8 @@
         :rel (p/pexprand 0.05 1.2)
         :pan (p/pwhite -1.0 1.0))
       (clock/play :p)
-      (Thread/sleep 12000)
+      ;; 32 eighth-notes at 60 BPM = 4s of notes + ~1.2s longest tail.
+      (Thread/sleep 7000)
       (clock/stop :p))
     (server/server-quit s)
     (println :done)))
