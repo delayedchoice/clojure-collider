@@ -25,7 +25,6 @@
             [clojure-collider.ugens.trig :as trg]
             [clojure-collider.ugens.line :as ln]
             [clojure-collider.ugens.noise :as noise]
-            [clojure-collider.ugens.filter :as flt]
             [clojure-collider.ugens.compander :as lim]
             [patterns.util :as u]
             [patterns.patterns :as p]
@@ -50,10 +49,13 @@
         sig (osc/sin-osc:ar (ops/+ (ln/x-line:ar (sgn freq-deviation) (sgn freq) atk)
                                    md)
                             phase-mod)
-        env (e/env-gen:kr (e/env [0 1 1 0] [atk hold rel] :sine))
+        env (e/env-gen:kr (e/env [0 1 1 0] [atk hold rel] :sine) :act :free)
         sig (ops/* amp (pan/pan2:ar sig))
-        sig (ops/* env sig)
-        _ (flt/detect-silence:ar (ops/sum sig) 0.000001 :act :free)]
+        ;; Upstream freed via detect-silence alone, but its 0.1s default
+        ;; fires during the 15-45s fade-in (envelope still ~0), killing
+        ;; every voice before it sounds. Envelope :free owns the lifetime
+        ;; instead; silence detection would need attack-aware timing.
+        sig (ops/* env sig)]
     (io/out:ar 0 (lim/limiter:ar sig 0.1))))
 
 ;; Sketch util fns, verbatim semantics. NOTE one upstream bug worked around:
