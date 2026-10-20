@@ -11,16 +11,11 @@
 ;;   `rand-range`, `exprand` is `rand-exp`.
 ;; - Chord events (:midinote vectors) fan out to one voice per pitch in the
 ;;   cl-collider backend (Overtone/SC behavior).
-;; - `:instrument` must be a keyword here (upstream passed the synth var).
-;; - `util/calc-freq-deviation` / `util/calc-lp-freq` live in the sketch's
-;;   private lib (source unknown) — [INFERENCE] pitch-tracking stand-ins
-;;   below, clearly marked.
-;; - Upstream's `:midinote` built N copies of ONE picked chord per event;
-;;   this picks per slot instead (a real varied cloud); same shape out.
-;; - The voice keeps its unused params (lpf-freq/resonance/rq/gain...) for
-;;   signature compat; the commented-out processing stays commented out.
+;; - `calc-*` map over flattened notes (upstream maps the nested chords,
+;;   which would throw); `:instrument` is a keyword, not the synth var.
 (ns enosification-drone
-  (:require [clojure-collider.server.server :as server]
+  (:require [clojure.string :as str]
+            [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [clojure-collider.ugens.osc :as osc]
@@ -61,20 +56,35 @@
         _ (flt/detect-silence:ar (ops/sum sig) 0.000001 :act :free)]
     (io/out:ar 0 (lim/limiter:ar sig 0.1))))
 
-;; [INFERENCE] stand-ins for the sketch's private util fns (sources unknown):
-;; deviation tightens toward unison as the harmonic rises; the lowpass tracks
-;; roughly harmonic * chord-register, capped at the 18k default.
-(defn- calc-freq-deviation [harmonic _midinotes]
-  (- 1.0 (/ (min (double harmonic) 9.0) 400.0)))
+;; Sketch util fns, verbatim semantics. NOTE one upstream bug worked around:
+;; they map over the NESTED chord list (where `(+ factor [44 ..])` would
+;; throw); the `notes` binding they compute-but-ignore shows the intent, so
+;; both fns map over the flattened notes. Per-voice split in the backend
+;; then zips one deviation/lp value per pitch.
+(defn calc-freq-deviation
+  "harmonic * midicps(note - [0,0.25)) per note: each voice glides from its
+   chord tone (detuned flat up to a quarter tone) scaled by harmonic."
+  [harmonic midinotes]
+  (let [factor (u/rand-range -0.25 0.0)]
+    (mapv #(* (double harmonic) (ops/midicps (+ factor %)))
+          (flatten midinotes))))
 
-(defn- calc-lp-freq [harmonic midinotes]
-  (let [base (if (seq midinotes)
-               (* 440.0 (Math/pow 2.0 (/ (- (/ (reduce + midinotes)
-                                               (count midinotes))
-                                            69.0)
-                                         12.0)))
-               440.0)]
-    (min 18000.0 (* (double harmonic) base 4.0))))
+(defn calc-lp-freq
+  "factor * harmonic * midicps(note) per note (factor in [3,9))."
+  [harmonic midinotes]
+  (let [factor (u/rand-range 3.0 9.0)]
+    (mapv #(* factor (* (double harmonic) (ops/midicps %)))
+          (flatten midinotes))))
+
+(defn get-name-from-id
+  "Segment after the last / in ID (nil-safe passthrough)."
+  [id]
+  (if (nil? id)
+    id
+    (let [index (str/index-of id "/")]
+      (if (nil? index)
+        id
+        (subs id (inc index))))))
 
 (def chords
   [[44 20 21 27]
@@ -87,8 +97,11 @@
   (nth coll (u/rand-int-range 0 (dec (count coll)))))
 (defn create-phrase [seed]
   (binding [u/*rng* (java.util.Random. seed)]
+    ;; Opening chord: the phrase-level :freq-deviation/:lpf-freq/:amp are
+    ;; computed once from these (upstream starts empty, which yields empty
+    ;; patterns downstream).
     (let [last-harmonic (atom 1)
-          last-midinotes (atom [])]
+          last-midinotes (atom [44 20 21 27])]
       (println (str "rnd: " (u/rand-range 0.0 1.0)))
       (pb/pbind
         :instrument :drone-synth
