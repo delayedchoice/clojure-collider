@@ -16,6 +16,7 @@
 (ns enosification-drone
   (:require [clojure.string :as str]
             [clojure-collider.server.server :as server]
+            [clojure-collider.server.options :as opts]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [clojure-collider.ugens.osc :as osc]
@@ -160,10 +161,13 @@
           sig (ops/* sig 0.5)]
       (io/out:ar 0 (lim/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
 (defn -main [& [seed-arg secs-arg]]
-  (let [s (server/make-external-server "example" :port 57138)
+  ;; 47-voice clouds each carry a Limiter (lookahead buffers); the default
+  ;; 8MB RT pool exhausts, so raise it (scsynth itself suggests -m).
+  (let [s (server/make-external-server
+             "example" :port 57138
+             :options (opts/make-server-options {:realtime-mem-size 65536}))
         seed (if seed-arg (Long/parseLong seed-arg) 12345)
         secs (if secs-arg (Long/parseLong secs-arg) 45)]
-    (server/server-boot s)
     (binding [server/*s* s]
       (clock/start-clock-loop :tempo bpm)
       (clock/enable-backend! (backend/make-cl-collider-backend s))
