@@ -19,19 +19,11 @@
             [clojure-collider.server.options :as opts]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
-            [clojure-collider.ugens.osc :as osc]
-            [clojure-collider.ugens.env-gen :as e]
-            [clojure-collider.ugens.in-out :as io]
-            [clojure-collider.ugens.pan :as pan]
-            [clojure-collider.ugens.trig :as trg]
-            [clojure-collider.ugens.line :as ln]
-            [clojure-collider.ugens.noise :as noise]
-            [clojure-collider.ugens.compander :as lim]
+            [ugens :as ug]
+            ;; patterns.util kept alongside the facade for one thing only:
+            ;; binding *rng* (dynamics are not re-exported by design).
             [patterns.util :as u]
-            [patterns.patterns :as p]
-            [patterns.pbind :as pb]
-            [patterns.backend :as backend]
-            [patterns.clock :as clock]))
+            [pattern :as p]))
 
 (def bpm 120)
 
@@ -45,14 +37,14 @@
   "harmonic * midicps(note - [0,0.25)) per note: each voice glides from its
    chord tone (detuned flat up to a quarter tone) scaled by harmonic."
   [harmonic midinotes]
-  (let [factor (u/rand-range -0.25 0.0)]
+  (let [factor (p/rand-range -0.25 0.0)]
     (mapv #(* (double harmonic) (ops/midicps (+ factor %)))
           (flatten midinotes))))
 
 (defn calc-lp-freq
   "factor * harmonic * midicps(note) per note (factor in [3,9))."
   [harmonic midinotes]
-  (let [factor (u/rand-range 3.0 9.0)]
+  (let [factor (p/rand-range 3.0 9.0)]
     (mapv #(* factor (* (double harmonic) (ops/midicps %)))
           (flatten midinotes))))
 
@@ -74,7 +66,7 @@
    [32 44 51 20 28]])
 
 (defn- rnd-nth [coll]
-  (nth coll (u/rand-int-range 0 (dec (count coll)))))
+  (nth coll (p/rand-int-range 0 (dec (count coll)))))
 (defn create-phrase [seed]
   (binding [u/*rng* (java.util.Random. seed)]
     ;; Opening chord: the phrase-level :freq-deviation/:lpf-freq/:amp are
@@ -82,29 +74,29 @@
     ;; patterns downstream).
     (let [last-harmonic (atom 1)
           last-midinotes (atom [44 20 21 27])]
-      (println (str "rnd: " (u/rand-range 0.0 1.0)))
-      (pb/pbind
+      (println (str "rnd: " (p/rand-range 0.0 1.0)))
+      (p/pbind
         :instrument :drone-synth
-        :dur (repeatedly #(u/rand-range 0.1 10.0))
-        :gain (repeatedly #(u/rand-exp 0.001 1.5))
+        :dur (repeatedly #(p/rand-range 0.1 10.0))
+        :gain (repeatedly #(p/rand-exp 0.001 1.5))
         :transition-time (repeatedly #(rnd-nth [0.875 2.0]))
-        :mod-index (repeatedly #(u/rand-range 0.00001 3.0))
-        :phase-mod-index (repeatedly #(u/rand-range 0.00001 0.1))
+        :mod-index (repeatedly #(p/rand-range 0.00001 3.0))
+        :phase-mod-index (repeatedly #(p/rand-range 0.00001 0.1))
         :midinote (repeatedly
                     (fn []
-                      (let [n (* 2 (u/rand-int-range 2 7))
+                      (let [n (* 2 (p/rand-int-range 2 7))
                             xs (vec (mapcat identity
                                             (repeatedly n #(rnd-nth chords))))]
                         (reset! last-midinotes xs))))
         :harmonic (repeatedly
                     #(reset! last-harmonic
-                             (Math/round (double (u/rand-exp 1 9)))))
+                             (Math/round (double (p/rand-exp 1 9)))))
         ;; Phrase-level constants (derefed once, as upstream evaluates the
         ;; map values once — the per-event atom resets feed nothing live).
         :freq-deviation (calc-freq-deviation @last-harmonic @last-midinotes)
-        :atk (repeatedly #(u/rand-range 15.0 45.0))
-        :hold (repeatedly #(u/rand-range 4.0 14.0))
-        :rel (repeatedly #(u/rand-range 30.0 60.0))
+        :atk (repeatedly #(p/rand-range 15.0 45.0))
+        :hold (repeatedly #(p/rand-range 4.0 14.0))
+        :rel (repeatedly #(p/rand-range 30.0 60.0))
         ;; Upstream fixes :amp per voice, which clips with 47-voice clouds
         ;; (7.5 x 47 at any envelope height). Read the 7.5 as the whole
         ;; cloud's budget instead: each event splits it across its pitches.
@@ -112,19 +104,19 @@
         :amp (repeatedly #(* 7.5 (/ 1 @last-harmonic)
                              (/ 1 (max 1 (count @last-midinotes)))))
         :lpf-freq (calc-lp-freq @last-harmonic @last-midinotes)
-        :rq (repeatedly #(u/rand-range 0.001 1.0))
-        :resonance (repeatedly #(u/rand-range 0.05 0.6))
-        :pan (repeatedly #(rnd-nth [(u/rand-range -1.0 -0.5)
-                                    (u/rand-range 0.5 1.0)]))
+        :rq (repeatedly #(p/rand-range 0.001 1.0))
+        :resonance (repeatedly #(p/rand-range 0.05 0.6))
+        :pan (repeatedly #(rnd-nth [(p/rand-range -1.0 -0.5)
+                                    (p/rand-range 0.5 1.0)]))
         :type :note
         :out-bus 16
         :random-seed seed))))
 
 (defn player [seed]
-  (clock/stop)
-  (clock/start-clock-loop :tempo bpm)
-  (pb/pdef :drone (create-phrase seed))
-  (clock/play :drone))
+  (p/stop)
+  (p/start-clock-loop :tempo bpm)
+  (p/pdef :drone (create-phrase seed))
+  (p/play :drone))
 
 (defn define-voice!
   "Define :drone-synth on the current *s* (server or NRT score). Must run
@@ -136,30 +128,30 @@
    mod-index 2 phase-mod-index 2 lpf-freq 18000
    resonance 0 hold 6.0 freq-deviation 0.975
    transition-time 0.875 rq 0.1 random-seed 4 out 0]
-  (let [frq (trg/clip:kr freq 20 20000)
-        _ (noise/rand-seed:ar random-seed)
+  (let [frq (ug/clip:kr freq 20 20000)
+        _ (ug/rand-seed:ar random-seed)
         ;; upstream: (* (sin-osc (/ frq 2)) #_(...)) — second factor
         ;; reader-discarded, so md is just the sub sine.
-        md (osc/sin-osc:ar (ops// frq 2))
-        phase-mod (ops/* (osc/sin-osc:ar frq) phase-mod-index)
-        sgn (nth [ops/+ ops/-] (u/rand-int-range 0 1))
-        sig (osc/sin-osc:ar (ops/+ (ln/x-line:ar (sgn freq-deviation) (sgn freq) atk)
+        md (ug/sin-osc:ar (ops// frq 2))
+        phase-mod (ops/* (ug/sin-osc:ar frq) phase-mod-index)
+        sgn (nth [ops/+ ops/-] (p/rand-int-range 0 1))
+        sig (ug/sin-osc:ar (ops/+ (ug/x-line:ar (sgn freq-deviation) (sgn freq) atk)
                                    md)
                             phase-mod)
-        env (e/env-gen:kr (e/env [0 1 1 0] [atk hold rel] :sine) :act :free)
-        sig (ops/* amp (pan/pan2:ar sig))
+        env (ug/env-gen:kr (ug/env [0 1 1 0] [atk hold rel] :sine) :act :free)
+        sig (ops/* amp (ug/pan2:ar sig))
         ;; Upstream freed via detect-silence alone, but its 0.1s default
         ;; fires during the 15-45s fade-in (envelope still ~0), killing
         ;; every voice before it sounds. Envelope :free owns the lifetime
         ;; instead; silence detection would need attack-aware timing.
         sig (ops/* env sig)]
-    (io/out:ar out (lim/limiter:ar sig 0.1))))
+    (ug/out:ar out (ug/limiter:ar sig 0.1))))
   ;; Master stage: per-voice limiters cap individuals, but 47-voice clouds
   ;; still sum hot. Fixed 0.7 trim + Compander backstop, same as eno-ending.
   (sdef/defsynth :mix-limiter [bus 16]
-    (let [sig (io/in:ar bus 2)
+    (let [sig (ug/in:ar bus 2)
           sig (ops/* sig 0.5)]
-      (io/out:ar 0 (lim/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
+      (ug/out:ar 0 (ug/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
 (defn -main [& [seed-arg secs-arg]]
   ;; 47-voice clouds each carry a Limiter (lookahead buffers); the default
   ;; 8MB RT pool exhausts, so raise it (scsynth itself suggests -m).
@@ -170,15 +162,15 @@
         secs (if secs-arg (Long/parseLong secs-arg) 45)]
     (server/server-boot s)
     (binding [server/*s* s]
-      (clock/start-clock-loop :tempo bpm)
-      (clock/enable-backend! (backend/make-cl-collider-backend s))
+      (p/start-clock-loop :tempo bpm)
+      (p/enable-backend! (p/make-cl-collider-backend s))
       (define-voice!)
       ;; Private mix bus (0-15 hardware); master last so it hears the mix.
       (sdef/synth :mix-limiter :bus 16 :pos :tail)
       (player seed)
       (Thread/sleep (* secs 1000))
       ;; end lets loops finish their cycle; tails die on envelope end.
-      (clock/end :drone)
+      (p/end :drone)
       (Thread/sleep 5000))
     (server/server-quit s)
     (println :done)))

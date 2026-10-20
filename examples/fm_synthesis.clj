@@ -11,17 +11,8 @@
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
-            [clojure-collider.ugens.osc :as osc]
-            [clojure-collider.ugens.env-gen :as e]
-            [clojure-collider.ugens.in-out :as io]
-            [clojure-collider.ugens.mac-ugens :as mouse]
-            [clojure-collider.ugens.noise :as noise]
-            [clojure-collider.ugens.poll :as poll]
-            [clojure-collider.ugens.pan :as pan]
-            [patterns.patterns :as p]
-            [patterns.pbind :as pb]
-            [patterns.backend :as backend]
-            [patterns.clock :as clock]))
+            [ugens :as ug]
+            [pattern :as p]))
 
 (defn -main [& _]
   (let [s (server/make-external-server "example" :port 57134)]
@@ -33,28 +24,28 @@
       ;; <val> lines in the output ARE the demo. Slow the first poll arg or
       ;; drop poll to silence them. dup = mono to stereo pair.
       (let [drone (sdef/play
-                    (ops/dup (ops/* (osc/sin-osc:ar
-                                      (ops/+ (poll/poll:kr 10 (mouse/mouse-y:kr 200 5000 :exp))
-                                             (osc/sin-osc:ar
-                                               (poll/poll:kr 10 (mouse/mouse-x:kr 1 2000 :exp))
-                                               0 (ops/range (noise/lf-noise0:kr 8) 20 10000)))
+                    (ops/dup (ops/* (ug/sin-osc:ar
+                                      (ops/+ (ug/poll:kr 10 (ug/mouse-y:kr 200 5000 :exp))
+                                             (ug/sin-osc:ar
+                                               (ug/poll:kr 10 (ug/mouse-x:kr 1 2000 :exp))
+                                               0 (ops/range (ug/lf-noise0:kr 8) 20 10000)))
                                       0 0.2))))]
         (Thread/sleep 6000)
         (server/node-free drone))
       ;; Percussive FM voice: carrier + one modulator, perc envelope frees the
       ;; synth (like upstream :act :free), panned stereo out.
       (sdef/defsynth :fm [car-hz 500 mod-hz 100 mod-amp 200 atk 0.01 rel 1 amp 0.2 pan 0]
-        (io/out:ar 0 (pan/pan2:ar (ops/* (e/env-gen:kr (e/env-perc atk rel) :act :free)
-                                         (osc/sin-osc:ar (ops/+ car-hz
-                                                                (osc/sin-osc:ar mod-hz 0 mod-amp)))
-                                         amp)
-                                  pan)))
+        (ug/out:ar 0 (ug/pan2:ar (ops/* (ug/env-gen:kr (ug/env-perc atk rel) :act :free)
+                                        (ug/sin-osc:ar (ops/+ car-hz
+                                                               (ug/sin-osc:ar mod-hz 0 mod-amp)))
+                                        amp)
+                                 pan)))
       ;; The pattern half: 32 eighth-notes (dur 1/8 at 60 BPM), every param
       ;; drawn fresh per note — pexprand for the exponential FM ranges,
       ;; pwhite for the uniform ones. Replaces the hand-rolled server/at loop.
-      (clock/start-clock-loop :tempo 60)
-      (clock/enable-backend! (backend/make-cl-collider-backend s))
-      (pb/pb :p
+      (p/start-clock-loop :tempo 60)
+      (p/enable-backend! (p/make-cl-collider-backend s))
+      (p/pb :p
         :instrument :fm
         :dur 1/8
         :car-hz (p/pexprand 20 10000)
@@ -64,9 +55,9 @@
         :atk (p/pexprand 0.001 0.05)
         :rel (p/pexprand 0.05 1.2)
         :pan (p/pwhite -1.0 1.0))
-      (clock/play :p)
+      (p/play :p)
       ;; 32 eighth-notes at 60 BPM = 4s of notes + ~1.2s longest tail.
       (Thread/sleep 7000)
-      (clock/stop :p))
+      (p/stop :p))
     (server/server-quit s)
     (println :done)))

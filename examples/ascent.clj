@@ -7,12 +7,7 @@
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
-            [clojure-collider.ugens.osc :as osc]
-            [clojure-collider.ugens.filter :as flt]
-            [clojure-collider.ugens.env-gen :as e]
-            [clojure-collider.ugens.line :as ln]
-            [clojure-collider.ugens.trig :as trg]
-            [clojure-collider.ugens.in-out :as io]))
+            [ugens :as ug]))
 
 (def dur 266.0)
 (def exit-t 244.0)
@@ -32,28 +27,28 @@
 (defn window
   "0->1 ramp over [enter,enter+attack], 1->0 over [exit-t,dur]."
   [t enter attack]
-  (let [rin (ln/lin-lin:kr (trg/clip:kr t (/ enter dur) (/ (+ enter attack) dur))
+  (let [rin (ug/lin-lin:kr (ug/clip:kr t (/ enter dur) (/ (+ enter attack) dur))
                             (/ enter dur) (/ (+ enter attack) dur) 0 1)
-        rout (ops/- 1 (ln/lin-lin:kr (trg/clip:kr t (/ exit-t dur) 1.0)
+        rout (ops/- 1 (ug/lin-lin:kr (ug/clip:kr t (/ exit-t dur) 1.0)
                                      (/ exit-t dur) 1.0 0 1))]
     (ops/* rin rout)))
 
 (defn -main [& _]
   (let [f (server/with-rendering ["/tmp/ascent-homage.aiff" :sr 44100 :pad dur]
             (sdef/play
-              (let [t (ln/line:kr 0 1 dur)
-                    arc (e/env-gen:kr (e/env arc-levels arc-times) :act :no-action)
+              (let [t (ug/line:kr 0 1 dur)
+                    arc (ug/env-gen:kr (ug/env arc-levels arc-times) :act :no-action)
                     cutoff (ops/+ 250 (ops/* 2000 arc))
                     sig (apply ops/+
                                (map-indexed
                                 (fn [i [m enter amp]]
                                   (let [fr (ops/midicps m)
                                         lfo (ops/+ 0.85 (ops/* 0.15
-                                                               (osc/sin-osc:kr (+ 0.04 (* 0.01 i)))))]
+                                                               (ug/sin-osc:kr (+ 0.04 (* 0.01 i)))))]
                                     (ops/* amp lfo (window t enter 12.0)
-                                           (flt/lpf:ar (ops/+ (osc/saw:ar fr)
-                                                              (osc/saw:ar (ops/* fr 1.003)))
+                                           (ug/lpf:ar (ops/+ (ug/saw:ar fr)
+                                                              (ug/saw:ar (ops/* fr 1.003)))
                                                        cutoff))))
                                 voices))]
-                (io/out:ar 0 [(ops/* 0.3 arc sig) (ops/* 0.3 arc sig)]))))]
+                (ug/out:ar 0 [(ops/* 0.3 arc sig) (ops/* 0.3 arc sig)]))))]
     (println :rendered f)))

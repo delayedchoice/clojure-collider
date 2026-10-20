@@ -15,15 +15,8 @@
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
-            [clojure-collider.ugens.osc :as osc]
-            [clojure-collider.ugens.env-gen :as e]
-            [clojure-collider.ugens.free-verb :as fv]
-            [clojure-collider.ugens.filter :as flt]
-            [clojure-collider.ugens.line :as ln]
-            [clojure-collider.ugens.trig :as trg]
-            [clojure-collider.ugens.compander :as lim]
             [clojure-collider.bus :as bus]
-            [clojure-collider.ugens.in-out :as io]))
+            [ugens :as ug]))
 
 ;; Time model. The recording changes harmony roughly every 5.5s (a half-bar
 ;; line), so beat = 2.5s (quarter = 24bpm), bar = 4 beats = 10s.
@@ -116,13 +109,13 @@
             ;; Params: note (MIDI), amp (this note's loudness), out (bus).
             (sdef/defsynth :felt-piano [note 60 amp 0.5 out 0]
               (let [fr (ops/midicps note)
-                    env (e/env-gen:kr (e/env [0 1 0] [0.4 18.0]) :act :free)
-                    sig (ops/+ (osc/sin-osc:ar fr 0 amp)
-                               (osc/sin-osc:ar (ops/* fr 2.0) 0 (ops/* amp 0.22))
-                               (osc/sin-osc:ar (ops/* fr 3.0) 0 (ops/* amp 0.06)))]
-                (io/out:ar out [(fv/freeverb:ar (ops/* env sig)
+                    env (ug/env-gen:kr (ug/env [0 1 0] [0.4 18.0]) :act :free)
+                    sig (ops/+ (ug/sin-osc:ar fr 0 amp)
+                               (ug/sin-osc:ar (ops/* fr 2.0) 0 (ops/* amp 0.22))
+                               (ug/sin-osc:ar (ops/* fr 3.0) 0 (ops/* amp 0.06)))]
+                (ug/out:ar out [(ug/freeverb:ar (ops/* env sig)
                                                 :mix 0.35 :room 0.85 :damp 0.3)
-                                (fv/freeverb:ar (ops/* env sig)
+                                (ug/freeverb:ar (ops/* env sig)
                                                 :mix 0.35 :room 0.85 :damp 0.3)])))
             ;; The mix limiter: synthesizes nothing, owns the hardware outs.
             ;; Reads the stereo mix bus, trims a fixed 0.7 headroom (the
@@ -131,9 +124,9 @@
             ;; the trim misses (it has no lookahead, so it is a backstop, not
             ;; a brick wall). Param: bus (which mix bus to read).
             (sdef/defsynth :mix-limiter [bus 16]
-              (let [sig (io/in:ar bus 2)]
+              (let [sig (ug/in:ar bus 2)]
                 (let [sig (ops/* sig 0.7)]
-                  (io/out:ar 0 (lim/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
+                  (ug/out:ar 0 (ug/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
             ;; Sustained pad wash under the piano (the recording's bed).
             ;; Four detuned saw pairs (Eb2 Bb2 Db3 Eb3) through a dark 600Hz
             ;; lowpass, faded in over the first 30% of the piece and held:
@@ -141,13 +134,13 @@
             ;; the 0.3 mark, `lin-lin` rescales that segment to a 0->1 fade.
             ;; Runs the full duration; :out-bus routes it to the mix bus.
             (sdef/play
-              (let [t (ln/line:kr 0 1 total-dur)
-                    g (ln/lin-lin:kr (trg/clip:kr t 0.0 0.3) 0.0 0.3 0 1)
+              (let [t (ug/line:kr 0 1 total-dur)
+                    g (ug/lin-lin:kr (ug/clip:kr t 0.0 0.3) 0.0 0.3 0 1)
                     voice (fn [m]
-                            (flt/lpf:ar (ops/+ (osc/saw:ar (ops/midicps m))
-                                               (osc/saw:ar (ops/* (ops/midicps m) 1.004)))
+                            (ug/lpf:ar (ops/+ (ug/saw:ar (ops/midicps m))
+                                               (ug/saw:ar (ops/* (ops/midicps m) 1.004)))
                                         600))]
-                (io/out:ar mixbus [(ops/* 0.035 g (apply ops/+ (map voice [39 44 46 51])))
+                (ug/out:ar mixbus [(ops/* 0.035 g (apply ops/+ (map voice [39 44 46 51])))
                                    (ops/* 0.035 g (apply ops/+ (map voice [39 44 46 51])))]))
               :out-bus mixbus)
             ;; The performance: every note in every event becomes one

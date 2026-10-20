@@ -3,9 +3,9 @@
 (ns nrt
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
-            [clojure-collider.ugens.osc :as osc]))
+            [ugens :as ug]))
 
 (defn -main [& _]
   (let [f (server/with-rendering ["/tmp/nrt-ex.aiff" :sr 44100 :pad 1.0]
-            (sdef/play (osc/sin-osc:ar 440 0 0.2)))]
+            (sdef/play (ug/sin-osc:ar 440 0 0.2)))]
     (println :rendered f)))

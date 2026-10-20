@@ -8,12 +8,7 @@
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
-            [clojure-collider.ugens.osc :as osc]
-            [clojure-collider.ugens.filter :as flt]
-            [clojure-collider.ugens.env-gen :as e]
-            [clojure-collider.ugens.line :as ln]
-            [clojure-collider.ugens.trig :as trg]
-            [clojure-collider.ugens.in-out :as io]))
+            [ugens :as ug]))
 
 (def dur 266.0)
 (def exit-t 244.0)
@@ -45,9 +40,9 @@
 
 (defn window
   [t enter exit attack release]
-  (let [rin (ln/lin-lin:kr (trg/clip:kr t (/ enter dur) (/ (+ enter attack) dur))
+  (let [rin (ug/lin-lin:kr (ug/clip:kr t (/ enter dur) (/ (+ enter attack) dur))
                             (/ enter dur) (/ (+ enter attack) dur) 0 1)
-        rout (ops/- 1 (ln/lin-lin:kr (trg/clip:kr t (/ (- exit release) dur) (/ exit dur))
+        rout (ops/- 1 (ug/lin-lin:kr (ug/clip:kr t (/ (- exit release) dur) (/ exit dur))
                                      (/ (- exit release) dur) (/ exit dur) 0 1))]
     (ops/* rin rout)))
 
@@ -55,13 +50,13 @@
   (let [f (server/with-rendering ["/tmp/ascent2.aiff" :sr 44100 :pad dur]
             ;; pluck voice for the arp
             (sdef/defsynth :pluck [note 63]
-              (let [env (e/env-gen:kr (e/env [0 1 0] [0.01 2.5]) :act :free)
-                    sig (ops/+ (osc/sin-osc:ar (ops/midicps note) 0 0.12)
-                               (osc/sin-osc:ar (ops/* (ops/midicps note) 2.0) 0 0.04))]
-                (io/out:ar 0 [sig sig])))
+              (let [env (ug/env-gen:kr (ug/env [0 1 0] [0.01 2.5]) :act :free)
+                    sig (ops/+ (ug/sin-osc:ar (ops/midicps note) 0 0.12)
+                               (ug/sin-osc:ar (ops/* (ops/midicps note) 2.0) 0 0.04))]
+                (ug/out:ar 0 [sig sig])))
             (sdef/play
-              (let [t (ln/line:kr 0 1 dur)
-                    arc (e/env-gen:kr (e/env arc-levels arc-times) :act :no-action)
+              (let [t (ug/line:kr 0 1 dur)
+                    arc (ug/env-gen:kr (ug/env arc-levels arc-times) :act :no-action)
                     dyn (ops/+ 0.25 (ops/* 0.75 arc))
                     cutoff (ops/+ 250 (ops/* 2400 dyn))
                     sig (apply ops/+
@@ -69,13 +64,13 @@
                                 (fn [i [m enter exit amp]]
                                   (let [fr (ops/midicps m)
                                         lfo (ops/+ 0.85 (ops/* 0.15
-                                                               (osc/sin-osc:kr (+ 0.04 (* 0.01 i)))))]
+                                                               (ug/sin-osc:kr (+ 0.04 (* 0.01 i)))))]
                                     (ops/* amp lfo (window t enter exit 18.0 16.0)
-                                           (flt/lpf:ar (ops/+ (osc/saw:ar fr)
-                                                              (osc/saw:ar (ops/* fr 1.003)))
+                                           (ug/lpf:ar (ops/+ (ug/saw:ar fr)
+                                                              (ug/saw:ar (ops/* fr 1.003)))
                                                        cutoff))))
                                 voices))]
-                (io/out:ar 0 [(ops/* 0.26 dyn sig) (ops/* 0.26 dyn sig)])))
+                (ug/out:ar 0 [(ops/* 0.26 dyn sig) (ops/* 0.26 dyn sig)])))
             ;; schedule the arp (messages timestamped into the score)
             (doseq [[m at] arp]
               (server/at at (sdef/synth :pluck :note m))))]
