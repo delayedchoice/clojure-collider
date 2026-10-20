@@ -1,0 +1,144 @@
+;; Drone piece translated from an Overtone sketch (enosification.drone):
+;; seeded chord-clouds through an FM/phase-mod voice with 15-45s attacks and
+;; 30-60s releases, freed by detect-silence.
+;; Run: clojure -M -m enosification-drone [seed=12345] [seconds=45]
+;;   (boots its own scsynth)
+;;
+;; Translation notes (Overtone -> here):
+;; - `pbind` with a MAP becomes pairs; infinite `repeatedly` seqs work as
+;;   child streams directly (sequentials wrap to infinite pseq).
+;; - `gen/*rnd*` binding becomes patterns.util `*rng*`; `uniform-double` is
+;;   `rand-range`, `exprand` is `rand-exp`.
+;; - Chord events (:midinote vectors) fan out to one voice per pitch in the
+;;   cl-collider backend (Overtone/SC behavior).
+;; - `:instrument` must be a keyword here (upstream passed the synth var).
+;; - `util/calc-freq-deviation` / `util/calc-lp-freq` live in the sketch's
+;;   private lib (source unknown) — [INFERENCE] pitch-tracking stand-ins
+;;   below, clearly marked.
+;; - Upstream's `:midinote` built N copies of ONE picked chord per event;
+;;   this picks per slot instead (a real varied cloud); same shape out.
+;; - The voice keeps its unused params (lpf-freq/resonance/rq/gain...) for
+;;   signature compat; the commented-out processing stays commented out.
+(ns enosification-drone
+  (:require [clojure-collider.server.server :as server]
+            [clojure-collider.synth.sdef :as sdef]
+            [clojure-collider.synth.operators :as ops]
+            [clojure-collider.ugens.osc :as osc]
+            [clojure-collider.ugens.env-gen :as e]
+            [clojure-collider.ugens.in-out :as io]
+            [clojure-collider.ugens.pan :as pan]
+            [clojure-collider.ugens.trig :as trg]
+            [clojure-collider.ugens.line :as ln]
+            [clojure-collider.ugens.noise :as noise]
+            [clojure-collider.ugens.filter :as flt]
+            [clojure-collider.ugens.compander :as lim]
+            [patterns.util :as u]
+            [patterns.patterns :as p]
+            [patterns.pbind :as pb]
+            [patterns.backend :as backend]
+            [patterns.clock :as clock]))
+
+(def bpm 120)
+
+(sdef/defsynth :drone-synth
+  [freq 440 atk 0.005 rel 0.3 amp 1 pan 0 gain 1
+   mod-index 2 phase-mod-index 2 lpf-freq 18000
+   resonance 0 hold 6.0 freq-deviation 0.975
+   transition-time 0.875 rq 0.1 random-seed 4]
+  (let [frq (trg/clip:kr freq 20 20000)
+        _ (noise/rand-seed:ar random-seed)
+        ;; upstream: (* (sin-osc (/ frq 2)) #_(...)) — second factor
+        ;; reader-discarded, so md is just the sub sine.
+        md (osc/sin-osc:ar (ops// frq 2))
+        phase-mod (ops/* (osc/sin-osc:ar frq) phase-mod-index)
+        sgn (nth [ops/+ ops/-] (u/rand-int-range 0 1))
+        sig (osc/sin-osc:ar (ops/+ (ln/x-line:ar (sgn freq-deviation) (sgn freq) atk)
+                                   md)
+                            phase-mod)
+        env (e/env-gen:kr (e/env [0 1 1 0] [atk hold rel] :sine))
+        sig (ops/* amp (pan/pan2:ar sig))
+        sig (ops/* env sig)
+        _ (flt/detect-silence:ar (ops/sum sig) 0.000001 :act :free)]
+    (io/out:ar 0 (lim/limiter:ar sig 0.1))))
+
+;; [INFERENCE] stand-ins for the sketch's private util fns (sources unknown):
+;; deviation tightens toward unison as the harmonic rises; the lowpass tracks
+;; roughly harmonic * chord-register, capped at the 18k default.
+(defn- calc-freq-deviation [harmonic _midinotes]
+  (- 1.0 (/ (min (double harmonic) 9.0) 400.0)))
+
+(defn- calc-lp-freq [harmonic midinotes]
+  (let [base (if (seq midinotes)
+               (* 440.0 (Math/pow 2.0 (/ (- (/ (reduce + midinotes)
+                                               (count midinotes))
+                                            69.0)
+                                         12.0)))
+               440.0)]
+    (min 18000.0 (* (double harmonic) base 4.0))))
+
+(def chords
+  [[44 20 21 27]
+   [32 20 39 40]
+   [40 44 45 20 51]
+   [44 56 20 51 52]
+   [32 44 51 20 28]])
+
+(defn- rnd-nth [coll]
+  (nth coll (u/rand-int-range 0 (dec (count coll)))))
+(defn create-phrase [seed]
+  (binding [u/*rng* (java.util.Random. seed)]
+    (let [last-harmonic (atom 1)
+          last-midinotes (atom [])]
+      (println (str "rnd: " (u/rand-range 0.0 1.0)))
+      (pb/pbind
+        :instrument :drone-synth
+        :dur (repeatedly #(u/rand-range 0.1 10.0))
+        :gain (repeatedly #(u/rand-exp 0.001 1.5))
+        :transition-time (repeatedly #(rnd-nth [0.875 2.0]))
+        :mod-index (repeatedly #(u/rand-range 0.00001 3.0))
+        :phase-mod-index (repeatedly #(u/rand-range 0.00001 0.1))
+        :midinote (repeatedly
+                    (fn []
+                      (let [n (* 2 (u/rand-int-range 2 7))
+                            xs (vec (mapcat identity
+                                            (repeatedly n #(rnd-nth chords))))]
+                        (reset! last-midinotes xs))))
+        :harmonic (repeatedly
+                    #(reset! last-harmonic
+                             (Math/round (double (u/rand-exp 1 9)))))
+        ;; Phrase-level constants (derefed once, as upstream evaluates the
+        ;; map values once — the per-event atom resets feed nothing live).
+        :freq-deviation (calc-freq-deviation @last-harmonic @last-midinotes)
+        :atk (repeatedly #(u/rand-range 15.0 45.0))
+        :hold (repeatedly #(u/rand-range 4.0 14.0))
+        :rel (repeatedly #(u/rand-range 30.0 60.0))
+        :amp (* 7.5 (/ 1 @last-harmonic))
+        :lpf-freq (calc-lp-freq @last-harmonic @last-midinotes)
+        :rq (repeatedly #(u/rand-range 0.001 1.0))
+        :resonance (repeatedly #(u/rand-range 0.05 0.6))
+        :pan (repeatedly #(rnd-nth [(u/rand-range -1.0 -0.5)
+                                    (u/rand-range 0.5 1.0)]))
+        :type :note
+        :random-seed seed))))
+
+(defn player [seed]
+  (clock/stop)
+  (clock/start-clock-loop :tempo bpm)
+  (pb/pdef :drone (create-phrase seed))
+  (clock/play :drone))
+
+(defn -main [& [seed-arg secs-arg]]
+  (let [s (server/make-external-server "example" :port 57138)
+        seed (if seed-arg (Long/parseLong seed-arg) 12345)
+        secs (if secs-arg (Long/parseLong secs-arg) 45)]
+    (server/server-boot s)
+    (binding [server/*s* s]
+      (clock/start-clock-loop :tempo bpm)
+      (clock/enable-backend! (backend/make-cl-collider-backend s))
+      (player seed)
+      (Thread/sleep (* secs 1000))
+      ;; end lets loops finish their cycle; tails die via detect-silence.
+      (clock/end :drone)
+      (Thread/sleep 5000))
+    (server/server-quit s)
+    (println :done)))

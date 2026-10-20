@@ -100,14 +100,33 @@
       (walk v)
       @found)))
 
+(defn- lazy-seq?
+  "True for unrealized lazy seqs (possibly infinite). Vectors and lists
+  are realized+indexed instead, so quoted lists still cycle."
+  [x]
+  (instance? clojure.lang.LazySeq x))
+
+(defn- walk-stream
+  "Stream consuming a (possibly infinite) seq head-to-tail, eop at its
+  natural end. Never realizes the seq: Overtone-style infinite
+  `(repeatedly f)` values work as pattern children."
+  [s]
+  (->Stream (atom {:s s})
+            (fn [{:keys [s]}]
+              (if-let [sq (seq s)]
+                [(first sq) {:s (rest sq)}]
+                u/eop))))
+
 (defn as-pstream
   "Coerce x to a Stream. Stream identity; pattern map -> fresh Stream
-   via build-stream; sequential -> infinite pseq; anything else ->
-   infinite const stream."
+  via build-stream; vector/list -> infinite cycling pseq; lazy seq ->
+  head-to-tail walk (infinite-friendly); anything else -> infinite
+  const stream."
   [x]
   (cond
     (pstream? x) x
     (pattern? x) (build-stream x)
+    (lazy-seq? x) (walk-stream x)
     (sequential? x) (build-stream {:ptype ::pseq :list (vec x) :repeats :inf})
     :else (let [v x]
             (->Stream (atom {}) (fn [st] [v st])))))

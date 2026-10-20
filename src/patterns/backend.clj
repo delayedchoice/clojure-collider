@@ -92,24 +92,34 @@
       (when-not (= :rest etype)
         (let [srv (:server b)
               iname (instrument-name event-map)
-              args (control-args event-map)
-              ;; Release only makes sense for gated voices: percussive
-              ;; synths (:act :free envelopes, no gate param) free
-              ;; themselves, and a late gate-0 would /n_set a dead node.
-              gated? (gated-synth? iname)
-              node (binding [server/*s* srv]
-                     (server/at beat-sec
-                       (apply sdef/synth iname args)))]
-          (when (and gated? (number? (ev/event-value event-map :sustain)))
-            (let [sus (ev/event-value event-map :sustain)]
-              (when (pos? sus)
-                (let [tempo (or (ev/event-value event-map :tempo) 1)
-                      gate-sec (+ (double beat-sec)
-                                  (* (double sus) (/ 1.0 (double tempo))))]
-                  (binding [server/*s* srv]
-                    (server/callback gate-sec
-                                     (fn [] (server/ctrl node :gate 0))))))))
-          node)))))
+              base (apply hash-map (control-args event-map))
+              ;; Chord fan-out (SC/Overtone behavior): a sequential :freq
+              ;; (usually from a :midinote vector) starts one voice per
+              ;; pitch, sharing the other controls. Scalar stays 1:1.
+              freqs (let [f (:freq base)] (if (sequential? f) (vec f) [f]))
+              start-one
+              (fn [f]
+                (let [node (binding [server/*s* srv]
+                             (server/at beat-sec
+                               (apply sdef/synth iname
+                                      (apply concat (seq (assoc base :freq f))))))]
+                  ;; Release only makes sense for gated voices: percussive
+                  ;; synths (:act :free envelopes, no gate param) free
+                  ;; themselves, and a late gate-0 would /n_set a dead node.
+                  (when (and (gated-synth? iname)
+                             (number? (ev/event-value event-map :sustain)))
+                    (let [sus (ev/event-value event-map :sustain)]
+                      (when (pos? sus)
+                        (let [tempo (or (ev/event-value event-map :tempo) 1)
+                              gate-sec (+ (double beat-sec)
+                                          (* (double sus) (/ 1.0 (double tempo))))]
+                          (binding [server/*s* srv]
+                            (server/callback gate-sec
+                                             (fn [] (server/ctrl node :gate 0))))))))
+                  node))]
+          (if (= 1 (count freqs))
+            (start-one (first freqs))
+            (mapv start-one freqs)))))))
 
 (defn make-cl-collider-backend
   "Make a ClColliderBackend bound to SERVER (defaults to server/*s*).

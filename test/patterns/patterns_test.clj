@@ -135,3 +135,17 @@
     (is (= 100 (count (p/next-n (p/pseq [1 2]) 100))))
     (is (= 50 (count (p/next-n (p/pwhite 0 1) 50))))
     (is (= 30 (count (p/next-n (p/pseries 0 1) 30))))))
+
+(deftest lazy-seqs-walk-without-realizing
+  (testing "infinite seqs (Overtone repeatedly style) stream forever"
+    (let [n (atom 0)
+          s (p/as-pstream (repeatedly #(swap! n inc)))]
+      (is (= [1 2 3 4 5] (vec (repeatedly 5 #(p/pnext! s)))))
+      (is (= 5 @n))))
+  (testing "finite lazy seqs walk once, then eop (vectors/lists still cycle)"
+    (let [s (p/as-pstream (map inc [10 20]))]
+      (is (= 11 (p/pnext! s)))
+      (is (= 21 (p/pnext! s)))
+      (is (p/eop? (p/pnext! s)))))
+  (testing "quoted lists keep cycling"
+    (is (= [1 2 1 2] (p/next-n '(1 2) 4)))))
