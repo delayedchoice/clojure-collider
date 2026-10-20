@@ -77,3 +77,24 @@
         (finally
           (when (server/boot? probe)
             (server/server-quit probe)))))))
+
+(deftest live-bundle-starts-synth
+  (testing "server/at bundles (incl. int-addressed /s_new) start nodes now"
+    (let [probe (try
+                  (let [s (server/make-external-server "test" :port live-port
+                                                       :just-connect? true)]
+                    (server/server-boot s)
+                    s)
+                  (catch Exception e
+                    (println "SKIP live bundle test:" (.getMessage e)) nil))]
+      (when probe
+        (try
+          (binding [server/*s* probe]
+            (sdef/defsynth live-bundled [freq 440]
+              (io/out:ar 0 (osc/sin-osc:ar freq 0 1 0.2)))
+            (let [n (server/at (server/now) (sdef/synth :live-bundled))]
+              (is (wait-playing n))
+              (server/node-free n)))
+          (finally
+            (when (server/boot? probe)
+              (server/server-quit probe))))))))

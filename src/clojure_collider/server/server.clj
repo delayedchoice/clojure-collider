@@ -211,6 +211,17 @@
         (throw (ex-info "server has no OSC device (not booted?)" {:server (:name server)})))
       (apply tx/send-message dev msg))))
 
+(defn ntp-timetag
+  "Unix-epoch seconds (+ server latency) -> unsigned 64-bit NTP timetag
+  (as a long whose BITS are exact; values past Long/MAX read negative,
+  which putLong emits correctly). Split seconds/fraction: a saturating
+  double->long would park bundles in year 2262."
+  [unix-secs latency]
+  (let [t (+ (double unix-secs) (double (or latency 0.0)) ntp-epoch-offset)
+        secs (long (Math/floor t))
+        frac (long (* (- t secs) 4294967296.0))]
+    (bit-or (bit-shift-left secs 32) frac)))
+
 (defn send-bundle [server time messages]
   (if (instance? NrtServer server)
     ;; upstream nrt-server: push [(round (* time 2^32)) messages], no
@@ -219,15 +230,10 @@
                 [(long (Math/round (* (double time) 4294967296.0)))
                  (mapv vec messages)])
         server)
-    ;; NTP timetags are UNSIGNED 64-bit: (unix + latency + epoch) * 2^32
-    ;; exceeds Long/MAX, so a saturating double->long parks every live
-    ;; bundle in year 2262. Split seconds/fraction instead; bit ops wrap
-    ;; mod 2^64, which putLong emits exactly.
+    ;; See ntp-timetag: split seconds/fraction so live bundles land now,
+    ;; not in year 2262.
     (let [dev @(:device server)
-          t (+ (double time) (or (:latency server) 0.0) ntp-epoch-offset)
-          secs (long (Math/floor t))
-          frac (long (* (- t secs) 4294967296.0))
-          tt (bit-or (bit-shift-left secs 32) frac)]
+          tt (ntp-timetag time (:latency server))]
       (apply tx/send-bundle dev tt messages))))
 
 (defn install-reply-responder [server cmd f]

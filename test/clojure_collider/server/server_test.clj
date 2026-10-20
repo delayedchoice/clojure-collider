@@ -6,6 +6,19 @@
 (def live-host "127.0.0.1")
 (def live-port 57120)
 (def private-port 57711)
+(deftest ntp-timetag-golden
+  (testing "unix-scale times encode exact NTP bytes (no 2262 saturation)"
+    ;; 1758000000 unix + 2208988800 epoch = 3966988800 = 0xEC737200
+    (let [tt (server/ntp-timetag 1758000000.0 0.0)
+          bb (doto (java.nio.ByteBuffer/allocate 8)
+               (.order java.nio.ByteOrder/BIG_ENDIAN))]
+      (.putLong bb tt)
+      (is (= "ec73720000000000"
+             (apply str (map #(format "%02x" (bit-and % 255)) (.array bb))))))
+    (is (= "3966988800"
+           (Long/toUnsignedString
+            (unsigned-bit-shift-right (server/ntp-timetag 1758000000.0 0.0) 32))))))
+
 (deftest construction
   (is (thrown? clojure.lang.ExceptionInfo
                (server/make-external-server "noport")))
