@@ -5,6 +5,8 @@
 ;; compensation, freed on envelope end.
 ;; Run: clojure -M -m clj-collider-drone [seed=2160] [seconds=45] [fade=5]
 ;;   (boots its own scsynth)
+;; Bounce (bit-identical offline render, no server):
+;;   clojure -M -m clj-collider-drone bounce SEED SECS OUTFILE [fade=5]
 ;;
 ;; Translation notes (SuperCollider -> here):
 ;; - `Pseed(n, ...)` is the seed arg (default 2160, as upstream).
@@ -33,7 +35,11 @@
     [freq 440 atk 0.005 rel 0.3 amp 1 pan 0 gain 1
      mod-index 2 phase-mod-index 2 lpf-freq 18000
      resonance 0 hold 6.0 freq-deviation 0.975
-     transition-time 0.875 resonz-q 0.1 out 0]
+     transition-time 0.875 resonz-q 0.1 out 0
+     ;; Bounce determinism: constant trig fires once at voice start and
+     ;; fixes server noise. Live defaults (trig 0) never fire: inert.
+     rseed-trig 0 rseed 1234]
+    (ug/rand-seed:ar rseed-trig rseed)
     (let [frq (ug/clip freq 20 20000)
           ;; FM depth ramps 0 -> mod-index over transition-time, scaled by freq.
           mod (ug/sin-osc:ar (ops// frq 2) 0
@@ -122,7 +128,48 @@
   (p/pdef :alspat (create-phrase seed))
   (p/play :alspat))
 
-(defn -main [& [seed-arg secs-arg fade-arg]]
+(defn bounce
+  "Deterministic offline render of the phrase to OUTF (same SEED ->
+  bit-identical audio). Events pulled synchronously with the seeded
+  pattern RNG, started on an NRT score at exact beat times; every voice
+  carries :rseed-trig 1 so its RandSeed fixes server noise. No server
+  needed. Returns the absolute output path."
+  [seed secs out fade]
+  (u/seed-rng! seed)
+  (let [bps (/ (double bpm) 60.0)
+        end-beat (* (double secs) bps)
+        dbg (p/make-debug-backend)
+        ;; One pull: play-take builds a fresh stream per call, so chunking
+        ;; would replay from the start. 100k events far covers the window
+        ;; (:dur >= 0.1 beat -> <= 10 events/beat).
+        _ (p/play-take (create-phrase seed) 100000 dbg)
+        evts (take-while #(<= (:beat %) end-beat) (p/captured-events dbg))
+        total (+ (double secs) (double fade) 2.0)]
+    (server/with-rendering [out :sr 44100 :pad total]
+      (define-voice!)
+      (let [master (sdef/synth :mix-limiter :bus 16 :pos :tail)
+            be (p/make-cl-collider-backend server/*s*)]
+        (doseq [{:keys [beat event]} evts]
+          (p/play-event be
+                        (assoc event :rseed-trig 1 :rseed seed)
+                        (* (double beat) (/ 60.0 bps))))
+        (doseq [i (range 20 0 -1)]
+          (server/at (+ (double secs) (* (double fade) (/ (- 20 i) 20.0)))
+            (server/ctrl master :amp (/ (dec i) 20.0))))))
+    out))
+
+(declare -live-main)
+
+(defn -main [& args]
+  (if (= "bounce" (first args))
+    (let [[_ seed-arg secs-arg out fade-arg] args
+          seed (Long/parseLong seed-arg)
+          secs (Long/parseLong secs-arg)
+          fade (if fade-arg (Long/parseLong fade-arg) 5)]
+      (println :rendered (bounce seed secs out fade)))
+    (apply -live-main args)))
+
+(defn -live-main [& [seed-arg secs-arg fade-arg]]
   ;; Dense overlapping runs + per-voice Limiter lookahead buffers: raise
   ;; the RT pool and the node table like the earlier drone sketch needed.
   (let [s (server/make-external-server
