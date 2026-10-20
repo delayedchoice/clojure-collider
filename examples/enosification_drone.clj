@@ -154,10 +154,13 @@
       (ug/out:ar 0 (ug/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
 (defn -main [& [seed-arg secs-arg]]
   ;; 47-voice clouds each carry a Limiter (lookahead buffers); the default
-  ;; 8MB RT pool exhausts, so raise it (scsynth itself suggests -m).
+  ;; 8MB RT pool exhausts, so raise it (scsynth itself suggests -m). Voice
+  ;; overlap math (~55 voices/event x ~60s lifetimes, 0.1s dur bursts) also
+  ;; overflows the 1024 default node table: raise that too.
   (let [s (server/make-external-server
              "example" :port 57138
-             :options (opts/make-server-options {:realtime-mem-size 65536}))
+             :options (opts/make-server-options {:realtime-mem-size 65536
+                                                 :max-num-nodes 4096}))
         seed (if seed-arg (Long/parseLong seed-arg) 12345)
         secs (if secs-arg (Long/parseLong secs-arg) 45)]
     (server/server-boot s)
