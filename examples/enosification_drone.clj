@@ -168,6 +168,7 @@
              :options (opts/make-server-options {:realtime-mem-size 65536}))
         seed (if seed-arg (Long/parseLong seed-arg) 12345)
         secs (if secs-arg (Long/parseLong secs-arg) 45)]
+    (server/server-boot s)
     (binding [server/*s* s]
       (clock/start-clock-loop :tempo bpm)
       (clock/enable-backend! (backend/make-cl-collider-backend s))
