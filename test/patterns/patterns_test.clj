@@ -104,9 +104,9 @@
 (deftest embed-repeat
   (testing "pn embeds full subpattern"
     (is (= [1 2 1 2 1 2] (p/next-n (p/pn (p/pseq [1 2] 1) 3) 10))))
-  (testing "pr repeats each value"
-    (is (= [0 0 1 1 2 2] (p/next-n (p/pr (p/pseries 0 1 3) 2) 10)))
-    (is (= [1] (p/next-n (p/pr (p/pseq [1 2] 1) (p/pseq [1 0] 1)) 5))))
+  (testing "repeat-each repeats each value (upstream pr)"
+    (is (= [0 0 1 1 2 2] (p/next-n (p/repeat-each (p/pseries 0 1 3) 2) 10)))
+    (is (= [1] (p/next-n (p/repeat-each (p/pseq [1 2] 1) (p/pseq [1 0] 1)) 5))))
   (testing "pfunc calls per output"
     (let [i (atom 0)]
       (is (= [1 2 3] (p/next-n (p/pfunc #(swap! i inc) 3) 5)))))
@@ -125,7 +125,7 @@
     (doseq [pat [(p/pseq [1] 1) (p/pser [1 2] 1) (p/prand [1] 1)
                  (p/pxrand [1 2] 1) (p/pwhite 0 1 1) (p/pseries 0 1 1)
                  (p/pgeom 1 2 1) (p/pn (p/pseq [1] 1) 1)
-                 (p/pr (p/pseq [1] 1) 1) (p/pshuf [1] 1)
+                 (p/repeat-each (p/pseq [1] 1) 1) (p/pshuf [1] 1)
                  (p/protate (p/pseq [1] 1) 0) (p/place [1] 1)]]
       (let [s (p/as-pstream pat)]
         (is (not (p/eop? (p/pnext! s))))

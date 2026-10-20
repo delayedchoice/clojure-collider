@@ -23,8 +23,8 @@
       (p/pb :automatic-jazz
         :instrument :jazz
         :note (p/pshuf (p/scale-notes :minor) 4)
-        :octave (p/pr (p/pwhite 2 7))
-        :root (p/pr (p/pwhite 0 12))
+        :octave (p/repeat-each (p/pwhite 2 7))
+        :root (p/repeat-each (p/pwhite 0 12))
         :dur (p/pshuf [1/3 1/4]))
       (p/play :automatic-jazz)
       (Thread/sleep 20000)

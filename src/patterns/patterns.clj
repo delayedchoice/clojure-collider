@@ -14,7 +14,6 @@
    Pattern-valued slots (list/offset/weights/lo/hi/...) resolve per
    output: sequential -> fixed vector, fn -> called per output, pattern
    map -> child stream pulled per output."
-  (:refer-clojure :exclude [pr])
   (:require [patterns.util :as u]))
 
 ;; ------------------------------------------------------------------
@@ -687,7 +686,7 @@
     (pgeom start (Math/pow (/ end start) (/ 1.0 (dec length))) length)))
 
 ;; ------------------------------------------------------------------
-;; pfunc / pr / plazy / pn
+;; pfunc / repeat-each / plazy / pn
 
 (defn pfunc
   "Yield (func) per output, length outputs total. func may also be a
@@ -714,9 +713,11 @@
              [(if (fn? f) (f) f)
               (assoc st :remaining (dec-rem (:remaining st)))])))))))
 
-(defn pr
+(defn repeat-each
   "Repeat each value from pat repeats times. repeats may be a number, a
-   pattern, or a fn (called with the current value, or 0-arity)."
+   pattern, or a fn (called with the current value, or 0-arity).
+   Upstream name: pr — renamed because pr collides with clojure.core/pr.
+   The stream `:ptype` stays ::pr."
   [pat & [repeats]]
   {:ptype ::pr :pattern pat
    :repeats (if (nil? repeats) :inf repeats)})
