@@ -57,24 +57,24 @@
 (defn env-linen [& [attack sus-time release level curve]]
   (env [0 (or level 1.0) (or level 1.0) 0]
        [(or attack 0.01) (or sus-time 1.0) (or release 1.0)]
-       (or curve :lin)))
+       (or curve :lin) 1))
 
 (defn env-adsr [& [attack-time decay-time sustain-level release-time peak-level curve bias]]
   (let [a (or attack-time 0.01) d (or decay-time 0.3) s (or sustain-level 0.5)
         r (or release-time 1.0) p (or peak-level 1.0)
         c (or curve -4.0) b (or bias 0.0)]
-    (env (op/+ [0 p (op/* p s) 0] b) [a d r] c)))
+    (env (op/+ [0 p (op/* p s) 0] b) [a d r] c 3)))
 
 (defn env-asr [& [attack-time sustain-level release-time curve]]
   (env [0 (or sustain-level 1.0) 0]
        [(or attack-time 0.01) (or release-time 1.0)]
-       (or curve -4.0)))
+       (or curve -4.0) 1))
 
 (defn env-dadsr [& [delay-time attack-time decay-time sustain-level release-time peak-level curve bias]]
   (let [dl (or delay-time 0.1) a (or attack-time 0.01) d (or decay-time 0.3)
         s (or sustain-level 0.5) r (or release-time 1.0) p (or peak-level 1.0)
         c (or curve -4.0) b (or bias 0.0)]
-    (env (op/+ [0 0 p (op/* p s) 0] b) [dl a d r] c)))
+    (env (op/+ [0 0 p (op/* p s) 0] b) [dl a d r] c 3)))
 
 ;; Opaque array (upstream Lisp arrays are atoms to lst-operation; Clojure
 ;; vectors are sequential and would wrongly expand as multichannel input).

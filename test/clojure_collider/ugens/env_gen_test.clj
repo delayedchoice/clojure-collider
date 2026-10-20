@@ -9,6 +9,10 @@
   (is (= 2 (e/env-shape-number :exp)))
   (is (= 5 (e/env-shape-number 2.5)))
   (is (thrown? clojure.lang.ExceptionInfo (e/env-shape-number :bogus)))
+  (testing "sustained envelopes carry SC release nodes (asr/linen 1, adsr/dadsr 3)"
+    (doseq [[f node] [[e/env-asr 1] [e/env-linen 1] [e/env-adsr 3] [e/env-dadsr 3]]]
+      (let [[arr] (e/make-env-array-from-env (f))]
+        (is (= node (nth (:values arr) 2)) (str f)))))
   (testing "control proxies count as custom curves (FM-2 index envelopes)"
     (is (= 5 (e/env-shape-number
               (ugen/->ProxyOutput nil :control :bipolar 0 0 -1 nil nil))))))
