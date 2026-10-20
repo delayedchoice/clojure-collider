@@ -3,7 +3,10 @@
    no running scsynth required."
   (:require [clojure.test :refer [deftest is testing]]
             [patterns.backend :as b]
-            [patterns.event :as ev]))
+            [patterns.event :as ev]
+            [clojure-collider.synth.sdef :as sdef]
+            [clojure-collider.ugens.osc :as osc]
+            [clojure-collider.ugens.in-out :as io]))
 
 (deftest debug-backend-captures-beats-and-events
   (let [db (b/make-debug-backend)
@@ -51,3 +54,13 @@
 (deftest freq-resolved-when-absent
    (let [args (apply hash-map (b/control-args (ev/event :midinote 60)))]
      (is (< (Math/abs (- 261.63 (:freq args))) 0.01))))
+
+(deftest gated-synth-predicate
+  (testing "gate-0 release only for synths exposing gate (no /n_set on dead nodes)"
+    (sdef/defsynth :gate-probe-gated [gate 1 freq 440]
+      (io/out:ar 0 (osc/sin-osc:ar freq 0 0.1)))
+    (sdef/defsynth :gate-probe-free [freq 440]
+      (io/out:ar 0 (osc/sin-osc:ar freq 0 0.1)))
+    (is (true? (b/gated-synth? :gate-probe-gated)))
+    (is (false? (b/gated-synth? :gate-probe-free)))
+    (is (false? (b/gated-synth? :no-such-synth-anywhere)))))

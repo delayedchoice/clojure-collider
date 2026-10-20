@@ -75,6 +75,16 @@
 
 ;; -- cl-collider backend ------------------------------------------------------
 
+(defn gated-synth?
+  "True when synth INAME's controls include a gate (i.e. it expects a
+  gate-0 release after sustain). Reads sdef metadata; unknown synths -> false."
+  [iname]
+  (boolean
+   (try
+    (some #(= "gate" (name (first %)))
+           (or (sdef/synthdef-metadata iname :controls) []))
+     (catch Exception _ false))))
+
 (defrecord ClColliderBackend [server]
   Backend
   (play-event [b event-map beat-sec]
@@ -83,17 +93,22 @@
         (let [srv (:server b)
               iname (instrument-name event-map)
               args (control-args event-map)
+              ;; Release only makes sense for gated voices: percussive
+              ;; synths (:act :free envelopes, no gate param) free
+              ;; themselves, and a late gate-0 would /n_set a dead node.
+              gated? (gated-synth? iname)
               node (binding [server/*s* srv]
                      (server/at beat-sec
                        (apply sdef/synth iname args)))]
-          (when-some [sus (ev/event-value event-map :sustain)]
-            (when (and (number? sus) (pos? sus))
-              (let [tempo (or (ev/event-value event-map :tempo) 1)
-                    gate-sec (+ (double beat-sec)
-                                (* (double sus) (/ 1.0 (double tempo))))]
-                (binding [server/*s* srv]
-                  (server/callback gate-sec
-                                   (fn [] (server/ctrl node :gate 0)))))))
+          (when (and gated? (number? (ev/event-value event-map :sustain)))
+            (let [sus (ev/event-value event-map :sustain)]
+              (when (pos? sus)
+                (let [tempo (or (ev/event-value event-map :tempo) 1)
+                      gate-sec (+ (double beat-sec)
+                                  (* (double sus) (/ 1.0 (double tempo))))]
+                  (binding [server/*s* srv]
+                    (server/callback gate-sec
+                                     (fn [] (server/ctrl node :gate 0))))))))
           node)))))
 
 (defn make-cl-collider-backend
