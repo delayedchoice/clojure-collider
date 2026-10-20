@@ -15,13 +15,13 @@ A Clojure port of [cl-collider](https://github.com/byulparan/cl-collider) — a 
 
 ## Status
 
-v0.1.0. Full upstream port: `clojure -M:test` green (95 tests / 405 assertions), 11 CL-parity goldens, 846-fn UGen library (`clojure-collider.ugens`), live `scsynth` verified (play, proxy, NRT render, FFT chains, volume, buffer fill/sequences/wavetable). See `docs/PLAN.md` for the roadmap.
+v1.0. Full upstream port + patterns library: `clojure -M:test` green (163 tests / 907 assertions), CL-parity goldens, 846-fn UGen library (`ugens`), live `scsynth` verified (play, proxy, NRT render, patterns sequencing, volume, buffers). See `docs/PLAN.md` for the roadmap.
 
 ## Install
 
 ```clojure
 ;; deps.edn
-bobby/clojure-collider {:mvn/version "0.1.0"}
+bobby/clojure-collider {:mvn/version "1.0"}
 ```
 
 Requires SuperCollider `scsynth` on `PATH` at runtime (same as upstream).
@@ -29,9 +29,9 @@ Requires SuperCollider `scsynth` on `PATH` at runtime (same as upstream).
 ## Release
 
 ```bash
-clojure -T:build jar   # -> target/clojure-collider-0.1.0.jar
+clojure -T:build jar   # -> target/clojure-collider-1.0.jar
 # needs CLOJARS_USERNAME + CLOJARS_PASSWORD (or CLOJARS_DEPLOY_TOKEN):
-clojure -M:deploy -m deps-deploy.deps-deploy deploy target/clojure-collider-0.1.0.jar
+clojure -M:deploy -m deps-deploy.deps-deploy deploy target/clojure-collider-1.0.jar
 ```
 
 ## Quick start

@@ -6,7 +6,7 @@
             [clojure-collider.synth.operators :as ops]))
 
 (deftest core-loads
-  (is (= "0.1.0-SNAPSHOT" core/version)))
+  (is (= "1.0" core/version)))
 
 (deftest colon-ugen-names-work
   (testing "colon rate suffix is valid defn target per DECISIONS.md"

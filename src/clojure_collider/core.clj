@@ -25,7 +25,7 @@
             [clojure-collider.ugens]
             [clojure-collider.volume :as vol]))
 
-(def version "0.1.0-SNAPSHOT")
+(def version "1.0")
 
 (defmacro import-vars
   "Copy public vars (fns and macros) from another ns, preserving metadata."
