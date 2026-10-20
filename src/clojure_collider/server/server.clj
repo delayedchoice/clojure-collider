@@ -219,11 +219,15 @@
                 [(long (Math/round (* (double time) 4294967296.0)))
                  (mapv vec messages)])
         server)
+    ;; NTP timetags are UNSIGNED 64-bit: (unix + latency + epoch) * 2^32
+    ;; exceeds Long/MAX, so a saturating double->long parks every live
+    ;; bundle in year 2262. Split seconds/fraction instead; bit ops wrap
+    ;; mod 2^64, which putLong emits exactly.
     (let [dev @(:device server)
-          tt (long (Math/round (* (+ (double time)
-                                      (or (:latency server) 0.0)
-                                      ntp-epoch-offset)
-                                   4294967296.0)))]
+          t (+ (double time) (or (:latency server) 0.0) ntp-epoch-offset)
+          secs (long (Math/floor t))
+          frac (long (* (- t secs) 4294967296.0))
+          tt (bit-or (bit-shift-left secs 32) frac)]
       (apply tx/send-bundle dev tt messages))))
 
 (defn install-reply-responder [server cmd f]

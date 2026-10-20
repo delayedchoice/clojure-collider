@@ -168,14 +168,11 @@
                       (let [msg (apply encode-message elt)
                             len (encode-int32 (alength msg))]
                         (cat-bytes len msg)))
-         body (if (and (sequential? data) (sequential? (first data)) (string? (ffirst data)))
-                ;; list of messages? heuristic: data = ([addr ...] [addr ...])
-                ;; if first element is itself a message (first is string addr), treat as bundle of many
-                ;; else treat as single message
-                ;; CL checks (listp (car data)) -> if true then multiple, else single
-                (if (sequential? (first data))
-                  (apply cat-bytes (map encode-elt data))
-                  (encode-elt data))
+         body (if (and (sequential? data) (sequential? (first data)))
+                ;; list of messages (CL: (listp (car data))). A message
+                ;; vector first means bundle-of-many; addresses may be
+                ;; strings OR ints (9 = /s_new over UDP).
+                (apply cat-bytes (map encode-elt data))
                 (encode-elt data))]
      (cat-bytes (aclone bundle-header-bytes) tt body))))
 

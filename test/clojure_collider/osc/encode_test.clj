@@ -1,5 +1,5 @@
 (ns clojure-collider.osc.encode-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test :refer [deftest is testing]]
             [clojure-collider.osc.encode :as enc])
   (:import [java.util Arrays]))
 
@@ -65,3 +65,12 @@
     (is (= 2 (count (:messages dec))))
     (is (= "/sync" (first (first (:messages dec)))))
     (is (= "/notify" (first (second (:messages dec)))))))
+
+(deftest bundle-int-address
+  (testing "int-addressed messages (9 = /s_new) bundle as many, not one blob"
+    (let [b (enc/encode-bundle [[9 "default" 1000 0 1 "freq" 440.0]] :now)
+          dec (enc/decode-bundle b)]
+      (is (= 1 (count (:messages dec))))
+      ;; message body starts at 20 (8 header + 8 timetag + 4 size);
+      ;; int address 9 encodes as int32 0 0 0 9
+      (is (bytes= (byte-array [0 0 0 9]) (Arrays/copyOfRange b 20 24))))))
