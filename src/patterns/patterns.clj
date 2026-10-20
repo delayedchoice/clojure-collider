@@ -347,11 +347,27 @@
    :list (if (sequential? coll) (vec coll) coll)
    :length (norm-count (if (nil? length) :inf length) "length")})
 
+(defn- embed-pick-step
+  "Shared pull for prand/pxrand: hold a picked pattern's stream across
+  pulls until it ends, then re-pick (SC list-pattern embedding). Plain
+  values yield directly. `pick` draws a fresh element from ITEMS."
+  [items st pick]
+  (loop [sub (:sub st)]
+    (if sub
+      (let [v (pnext! sub)]
+        (if (u/eop? v)
+          (recur nil)
+          [v (assoc st :sub sub :remaining (dec-rem (:remaining st)))]))
+      (let [picked (pick)]
+        (if (pattern? picked)
+          (recur (as-pstream picked))
+          [picked (assoc st :remaining (dec-rem (:remaining st)))])))))
+
 (defmethod build-stream ::prand
   [{:keys [list length] :or {length :inf}}]
   (let [src (source-stream (if (sequential? list) (vec list) list))]
     (->Stream
-     (atom {:remaining (norm-count length "length")})
+     (atom {:remaining (norm-count length "length") :sub nil})
      (fn [st]
        (if-not (remain? (:remaining st))
          u/eop
@@ -363,8 +379,8 @@
                                          {:value items})))]
              (when (empty? items)
                (throw (ex-info "patterns: prand list must not be empty" {})))
-             [(nth items (u/rand-int-range 0 (dec (count items))))
-              (assoc st :remaining (dec-rem (:remaining st)))])))))))
+             (embed-pick-step items st
+               #(nth items (u/rand-int-range 0 (dec (count items))))))))))))
 
 (defn pxrand
   "Yield random values from coll, never repeating equal values twice in
@@ -384,7 +400,7 @@
   [{:keys [list length] :or {length :inf}}]
   (let [src (source-stream (if (sequential? list) (vec list) list))]
     (->Stream
-     (atom {:remaining (norm-count length "length") :last ::none})
+     (atom {:remaining (norm-count length "length") :last ::none :sub nil})
      (fn [st]
        (if-not (remain? (:remaining st))
          u/eop
@@ -396,13 +412,25 @@
                                          {:value items})))]
              (when (empty? items)
                (throw (ex-info "patterns: pxrand list must not be empty" {})))
-             (let [pick (if (= 1 (count items))
-                          (first items)
-                          (loop [c (nth items (u/rand-int-range 0 (dec (count items))))]
-                            (if (= c (:last st))
-                              (recur (nth items (u/rand-int-range 0 (dec (count items)))))
-                              c)))]
-               [pick (assoc st :last pick :remaining (dec-rem (:remaining st)))]))))))))
+             (let [draw (fn [last]
+                          (if (= 1 (count items))
+                            (first items)
+                            (loop [c (nth items (u/rand-int-range 0 (dec (count items))))]
+                              (if (= c last)
+                                (recur (nth items (u/rand-int-range 0 (dec (count items)))))
+                                c))))]
+               (loop [sub (:sub st) last (:last st)]
+                 (if sub
+                   (let [v (pnext! sub)]
+                     (if (u/eop? v)
+                       (recur nil last)
+                       [v (assoc st :sub sub :last last
+                                   :remaining (dec-rem (:remaining st)))]))
+                   (let [picked (draw last)]
+                     (if (pattern? picked)
+                       (recur (as-pstream picked) picked)
+                       [picked (assoc st :last picked
+                                         :remaining (dec-rem (:remaining st)))]))))))))))))
 
 (defn pwrand
   "Yield random elements from coll weighted by weights (default :equal),
@@ -731,7 +759,7 @@
 (defmethod build-stream ::pr
   [{:keys [pattern repeats] :or {repeats :inf}}]
   (let [ps (as-pstream pattern)
-        rs (cond (fn? repeats) {:fn repeats}
+        rs (cond (fn? repeats) {:f repeats}
                  (pattern? repeats) {:stream (as-pstream repeats)}
                  (sequential? repeats) {:stream (as-pstream repeats)}
                  :else {:const (norm-count repeats "repeats")})]
@@ -744,10 +772,10 @@
            (let [v (pnext! ps)]
              (if (u/eop? v)
                u/eop
-               (let [{:keys [const stream f]} rs
-                     r (cond const const
-                             stream (pnext! stream)
-                             f (call-repeat-fn f v))]
+              (let [{:keys [const stream f]} rs
+                    r (cond const const
+                            stream (pnext! stream)
+                            f (call-repeat-fn f v))]
                  (if (u/eop? r)
                    u/eop
                    (let [r (norm-count r "repeats")]

@@ -106,7 +106,9 @@
     (is (= [1 2 1 2 1 2] (p/next-n (p/pn (p/pseq [1 2] 1) 3) 10))))
   (testing "repeat-each repeats each value (upstream pr)"
     (is (= [0 0 1 1 2 2] (p/next-n (p/repeat-each (p/pseries 0 1 3) 2) 10)))
-    (is (= [1] (p/next-n (p/repeat-each (p/pseq [1 2] 1) (p/pseq [1 0] 1)) 5))))
+    (is (= [1] (p/next-n (p/repeat-each (p/pseq [1 2] 1) (p/pseq [1 0] 1)) 5)))
+    (is (= [7 7 8 8] (p/next-n (p/repeat-each (p/pseq [7 8] 1) (fn [_] 2)) 6))
+        "fn repeats called per value"))
   (testing "pfunc calls per output"
     (let [i (atom 0)]
       (is (= [1 2 3] (p/next-n (p/pfunc #(swap! i inc) 3) 5)))))
@@ -149,3 +151,10 @@
       (is (p/eop? (p/pnext! s)))))
   (testing "quoted lists keep cycling"
     (is (= [1 2 1 2] (p/next-n '(1 2) 4)))))
+
+(deftest prand-embeds-patterns
+  (testing "picked patterns play through (SC list-pattern embedding)"
+    (let [got (p/next-n (p/prand [(p/pwhite -1.0 -0.5 1) (p/pwhite 0.5 1.0 1)]) 6)]
+      (is (= 6 (count got)))
+      (is (every? number? got))
+      (is (every? #(or (< % -0.4) (> % 0.4)) got)))))
