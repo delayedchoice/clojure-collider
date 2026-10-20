@@ -79,6 +79,10 @@
    [32 44 51 20 28]])
 
 (defn create-phrase [seed]
+  ;; Seed the ROOT rng: pulls happen on the scheduler thread (raw Thread,
+  ;; no binding conveyance), which sees only the root value. The binding
+  ;; keeps direct (calling-thread) pulls deterministic too.
+  (u/seed-rng! seed)
   (binding [u/*rng* (java.util.Random. seed)]
     (let [stutter-n (p/as-pstream (p/pwhite 2 7))
           dev-white (p/as-pstream (p/pwhite -0.25 0.0))
