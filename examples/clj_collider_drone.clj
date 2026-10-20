@@ -182,7 +182,7 @@
     (server/server-boot s)
     (binding [server/*s* s]
       (p/start-clock-loop :tempo bpm)
-      (p/enable-backend! (p/make-cl-collider-backend s))
+      ;; No explicit backend: play auto-enables one on the booted *s*.
       (define-voice!)
       (let [master (sdef/synth :mix-limiter :bus 16 :pos :tail)]
         (player seed)

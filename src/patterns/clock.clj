@@ -11,7 +11,8 @@
             [patterns.patterns :as p]
             [patterns.pbind :as pbind]
             [patterns.backend :as backend]
-            [clojure-collider.server.scheduler :as sched]))
+            [clojure-collider.server.scheduler :as sched]
+            [clojure-collider.server.server :as server]))
 
 ;; -- clock --------------------------------------------------------------------
 
@@ -145,7 +146,11 @@
 
 (defn play
   "Play X (pattern map, event map, or pdef keyword) on CLOCK (*clock*).
-   Returns the task map. The task loops until stopped; see end/stop."
+   Returns the task map. The task loops until stopped; see end/stop.
+   With no backends enabled and a booted server on server/*s*, a
+   ClColliderBackend is enabled automatically, so play makes sound by
+   default; enable backends explicitly (e.g. DebugBackend) to override
+   or to hear nothing."
   ([x] (play *clock* x))
   ([clock x & {:keys [quant loop?] :or {loop? true}}]
    (when (nil? clock)
@@ -161,6 +166,9 @@
                :next-beat (atom (double start))
                :loop? (atom (boolean loop?))}]
      (swap! (:tasks clock) conj task)
+     (when (and (empty? @(:enabled-backends clock))
+                server/*s* (server/boot? server/*s*))
+       (enable-backend! clock (backend/make-cl-collider-backend server/*s*)))
      (when-let [tc (:tempo-clock clock)]
        (sched/tempo-clock-add tc (double start)
          (fn [] (step-task! clock task))))
