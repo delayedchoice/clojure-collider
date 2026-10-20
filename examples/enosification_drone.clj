@@ -1,8 +1,8 @@
 ;; Drone piece translated from an Overtone sketch (enosification.drone):
 ;; seeded chord-clouds through an FM/phase-mod voice with 15-45s attacks and
 ;; 30-60s releases, freed by detect-silence.
-;; Run: clojure -M -m enosification-drone [seed=12345] [seconds=45]
-;;   (boots its own scsynth)
+;; Run: clojure -M -m enosification-drone [seed=12345] [seconds=45] [fade=5]
+;;   (boots its own scsynth; fade is the end fade-out in seconds)
 ;;
 ;; Translation notes (Overtone -> here):
 ;; - `pbind` with a MAP becomes pairs; infinite `repeatedly` seqs work as
@@ -148,11 +148,11 @@
     (ug/out:ar out (ug/limiter:ar sig 0.1))))
   ;; Master stage: per-voice limiters cap individuals, but 47-voice clouds
   ;; still sum hot. Fixed 0.7 trim + Compander backstop, same as eno-ending.
-  (sdef/defsynth :mix-limiter [bus 16]
+  (sdef/defsynth :mix-limiter [bus 16 amp 1.0]
     (let [sig (ug/in:ar bus 2)
-          sig (ops/* sig 0.5)]
+          sig (ops/* sig 0.5 amp)]
       (ug/out:ar 0 (ug/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
-(defn -main [& [seed-arg secs-arg]]
+(defn -main [& [seed-arg secs-arg fade-arg]]
   ;; 47-voice clouds each carry a Limiter (lookahead buffers); the default
   ;; 8MB RT pool exhausts, so raise it (scsynth itself suggests -m). Voice
   ;; overlap math (~55 voices/event x ~60s lifetimes, 0.1s dur bursts) also
@@ -162,18 +162,23 @@
              :options (opts/make-server-options {:realtime-mem-size 65536
                                                  :max-num-nodes 4096}))
         seed (if seed-arg (Long/parseLong seed-arg) 12345)
-        secs (if secs-arg (Long/parseLong secs-arg) 45)]
+        secs (if secs-arg (Long/parseLong secs-arg) 45)
+        fade (if fade-arg (Long/parseLong fade-arg) 5)]
     (server/server-boot s)
     (binding [server/*s* s]
       (p/start-clock-loop :tempo bpm)
       (p/enable-backend! (p/make-cl-collider-backend s))
       (define-voice!)
       ;; Private mix bus (0-15 hardware); master last so it hears the mix.
-      (sdef/synth :mix-limiter :bus 16 :pos :tail)
-      (player seed)
-      (Thread/sleep (* secs 1000))
-      ;; end lets loops finish their cycle; tails die on envelope end.
-      (p/end :drone)
-      (Thread/sleep 5000))
+      (let [master (sdef/synth :mix-limiter :bus 16 :pos :tail)]
+        (player seed)
+        (Thread/sleep (* secs 1000))
+        ;; end lets loops finish their cycle; tails die on envelope end.
+        (p/end :drone)
+        ;; Master fade: 20 linear steps on :amp, then a breath for tails.
+        (doseq [i (range 20 0 -1)]
+          (server/ctrl master :amp (/ (dec i) 20.0))
+          (Thread/sleep (long (/ (* fade 1000) 20))))
+        (Thread/sleep 2000)))
     (server/server-quit s)
     (println :done)))
