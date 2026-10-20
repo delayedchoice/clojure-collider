@@ -3,8 +3,9 @@
 ;; seeded runs of same-chord swells through an FM/PM voice with tanh,
 ;; Karplus-Strong, resonant lowpass, ringing filter and hearing
 ;; compensation, freed on envelope end.
-;; Run: clojure -M -m clj-collider-drone [seed=2160] [seconds=45] [fade=5]
-;;   (boots its own scsynth)
+;; Run: clojure -M -m clj-collider-drone [seed=2160] [seconds=45] [fade=5] [device]
+;;   (boots its own scsynth; device = index into scsynth's list or exact
+;;   name, e.g. 3 or "BlackHole 2ch"; omitted = system default)
 ;; Bounce (bit-identical offline render, no server):
 ;;   clojure -M -m clj-collider-drone bounce SEED SECS OUTFILE [fade=5]
 ;;
@@ -17,7 +18,8 @@
 ;; - `Prand([Pwhite..1, Pwhite..1])` embeds one single draw per pick.
 ;; - Reversed `Pwhite(0.6, 0.05)` works (negative span uniform).
 (ns clj-collider-drone
-  (:require [clojure-collider.server.server :as server]
+  (:require [clojure.string :as str]
+            [clojure-collider.server.server :as server]
             [clojure-collider.server.options :as opts]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
@@ -169,13 +171,56 @@
       (println :rendered (bounce seed secs out fade)))
     (apply -live-main args)))
 
-(defn -live-main [& [seed-arg secs-arg fade-arg]]
+(defn- list-audio-devices
+  "Probe scsynth with a bogus -H; it prints its numbered device list
+  (then exits or hangs on the bad device). Returns [[index name] ...]."
+  []
+  (let [pb (doto (ProcessBuilder. ^java.util.List
+                                  [server/*sc-synth-program* "-u" "57999"
+                                   "-H" "__no-such-device__"])
+             (.redirectErrorStream true))
+        proc (.start pb)]
+    ;; Bogus -H may exit or hang after printing; wait, drain what's there
+    ;; (never slurp to EOF), then kill.
+    (.waitFor proc 10 java.util.concurrent.TimeUnit/SECONDS)
+    (let [s (.getInputStream proc)
+          baos (java.io.ByteArrayOutputStream.)
+          buf (byte-array 8192)]
+      (loop []
+        (let [n (.available s)]
+          (when (pos? n)
+            (let [r (.read s buf 0 (min n 8192))]
+              (when (pos? r)
+                (.write baos buf 0 r)
+                (recur))))))
+      (.destroy proc)
+      (->> (str/split-lines (.toString baos))
+           (keep #(re-matches #"\s*(\d+)\s*:\s*\"(.*)\"" %))
+           (mapv (fn [[_ i nm]] [(Long/parseLong i) nm]))))))
+
+(defn- resolve-device
+  "CLI device arg -> scsynth -H name. Bare index looks up the probe list;
+  anything else passes through as a device name. nil -> default device."
+  [s]
+  (cond (nil? s) nil
+        (re-matches #"\d+" s)
+        (let [i (Long/parseLong s)
+              devs (list-audio-devices)]
+          (or (some (fn [[j nm]] (when (= i j) nm)) devs)
+              (throw (ex-info "device index out of range"
+                              {:index i :devices devs}))))
+        :else s))
+
+(defn -live-main [& [seed-arg secs-arg fade-arg device-arg]]
   ;; Dense overlapping runs + per-voice Limiter lookahead buffers: raise
   ;; the RT pool and the node table like the earlier drone sketch needed.
-  (let [s (server/make-external-server
+  (let [device (resolve-device device-arg)
+        _ (when device (println :device device))
+        s (server/make-external-server
              "example" :port 57138
              :options (opts/make-server-options {:realtime-mem-size 65536
-                                                 :max-num-nodes 4096}))
+                                                 :max-num-nodes 4096
+                                                 :device device}))
         seed (if seed-arg (Long/parseLong seed-arg) 2160)
         secs (if secs-arg (Long/parseLong secs-arg) 45)
         fade (if fade-arg (Long/parseLong fade-arg) 5)]
