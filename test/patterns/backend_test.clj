@@ -64,3 +64,13 @@
     (is (true? (b/gated-synth? :gate-probe-gated)))
     (is (false? (b/gated-synth? :gate-probe-free)))
     (is (false? (b/gated-synth? :no-such-synth-anywhere)))))
+
+(deftest out-bus-becomes-out-control
+  (testing ":out-bus routes voices to a mix bus"
+    (let [args (apply hash-map (b/control-args (ev/event :note 60 :out-bus 16)))]
+      (is (= 16 (:out args)))
+      (is (not (contains? args :out-bus)))))
+  (testing "absent :out-bus leaves :out alone"
+    (let [args (apply hash-map (b/control-args (ev/event :note 60)))]
+      (is (not (contains? args :out-bus)))
+      (is (not (contains? args :out))))))

@@ -21,21 +21,25 @@
 
 (def reserved-keys
   "Event keys consumed by the clock/backend, never forwarded as synth controls.
-   Per DECISIONS.md 2026-10-20."
+  Per DECISIONS.md 2026-10-20. :out-bus is consumed into the :out control."
   #{:type :dur :delta :duration :sustain :legato :quant :play-quant
-    :beat :tempo :timing-offset :group :out :backend})
+    :beat :tempo :timing-offset :group :out :out-bus :backend})
 
 (defn control-args
   "Strip reserved keys (plus :instrument) from EV, resolve :freq via
-   event-value, and return a flat [:k v ...] control-arg seq for sdef/synth.
-   Nil-valued controls are dropped."
+  event-value, and return a flat [:k v ...] control-arg seq for sdef/synth.
+  Nil-valued controls are dropped. An :out-bus event key becomes the :out
+  control (default 0); without it voices hit hardware directly."
   [event-map]
   (let [freq (ev/event-value event-map :freq)
-        kept (apply dissoc event-map :instrument reserved-keys)]
+        kept (apply dissoc event-map :instrument reserved-keys)
+        with-out (if (contains? event-map :out-bus)
+                   (assoc kept :out (:out-bus event-map))
+                   kept)]
     (into []
           (comp (remove (fn [[_ v]] (nil? v)))
                 (mapcat identity))
-          (assoc kept :freq freq))))
+          (assoc with-out :freq freq))))
 
 (defn- instrument-name
   "Resolve the synth name from EV's :instrument (keyword/string/symbol,

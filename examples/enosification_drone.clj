@@ -34,29 +34,6 @@
 
 (def bpm 120)
 
-(sdef/defsynth :drone-synth
-  [freq 440 atk 0.005 rel 0.3 amp 1 pan 0 gain 1
-   mod-index 2 phase-mod-index 2 lpf-freq 18000
-   resonance 0 hold 6.0 freq-deviation 0.975
-   transition-time 0.875 rq 0.1 random-seed 4]
-  (let [frq (trg/clip:kr freq 20 20000)
-        _ (noise/rand-seed:ar random-seed)
-        ;; upstream: (* (sin-osc (/ frq 2)) #_(...)) — second factor
-        ;; reader-discarded, so md is just the sub sine.
-        md (osc/sin-osc:ar (ops// frq 2))
-        phase-mod (ops/* (osc/sin-osc:ar frq) phase-mod-index)
-        sgn (nth [ops/+ ops/-] (u/rand-int-range 0 1))
-        sig (osc/sin-osc:ar (ops/+ (ln/x-line:ar (sgn freq-deviation) (sgn freq) atk)
-                                   md)
-                            phase-mod)
-        env (e/env-gen:kr (e/env [0 1 1 0] [atk hold rel] :sine) :act :free)
-        sig (ops/* amp (pan/pan2:ar sig))
-        ;; Upstream freed via detect-silence alone, but its 0.1s default
-        ;; fires during the 15-45s fade-in (envelope still ~0), killing
-        ;; every voice before it sounds. Envelope :free owns the lifetime
-        ;; instead; silence detection would need attack-aware timing.
-        sig (ops/* env sig)]
-    (io/out:ar 0 (lim/limiter:ar sig 0.1))))
 
 ;; Sketch util fns, verbatim semantics. NOTE one upstream bug worked around:
 ;; they map over the NESTED chord list (where `(+ factor [44 ..])` would
@@ -127,13 +104,19 @@
         :atk (repeatedly #(u/rand-range 15.0 45.0))
         :hold (repeatedly #(u/rand-range 4.0 14.0))
         :rel (repeatedly #(u/rand-range 30.0 60.0))
-        :amp (* 7.5 (/ 1 @last-harmonic))
+        ;; Upstream fixes :amp per voice, which clips with 47-voice clouds
+        ;; (7.5 x 47 at any envelope height). Read the 7.5 as the whole
+        ;; cloud's budget instead: each event splits it across its pitches.
+        ;; :midinote is pulled before :amp, so the atom holds this event.
+        :amp (repeatedly #(* 7.5 (/ 1 @last-harmonic)
+                             (/ 1 (max 1 (count @last-midinotes)))))
         :lpf-freq (calc-lp-freq @last-harmonic @last-midinotes)
         :rq (repeatedly #(u/rand-range 0.001 1.0))
         :resonance (repeatedly #(u/rand-range 0.05 0.6))
         :pan (repeatedly #(rnd-nth [(u/rand-range -1.0 -0.5)
                                     (u/rand-range 0.5 1.0)]))
         :type :note
+        :out-bus 16
         :random-seed seed))))
 
 (defn player [seed]
@@ -142,6 +125,40 @@
   (pb/pdef :drone (create-phrase seed))
   (clock/play :drone))
 
+(defn define-voice!
+  "Define :drone-synth on the current *s* (server or NRT score). Must run
+  after boot / inside with-rendering: definitions only reach the synthesis
+  engine when a server is listening."
+  []
+(sdef/defsynth :drone-synth
+  [freq 440 atk 0.005 rel 0.3 amp 1 pan 0 gain 1
+   mod-index 2 phase-mod-index 2 lpf-freq 18000
+   resonance 0 hold 6.0 freq-deviation 0.975
+   transition-time 0.875 rq 0.1 random-seed 4 out 0]
+  (let [frq (trg/clip:kr freq 20 20000)
+        _ (noise/rand-seed:ar random-seed)
+        ;; upstream: (* (sin-osc (/ frq 2)) #_(...)) — second factor
+        ;; reader-discarded, so md is just the sub sine.
+        md (osc/sin-osc:ar (ops// frq 2))
+        phase-mod (ops/* (osc/sin-osc:ar frq) phase-mod-index)
+        sgn (nth [ops/+ ops/-] (u/rand-int-range 0 1))
+        sig (osc/sin-osc:ar (ops/+ (ln/x-line:ar (sgn freq-deviation) (sgn freq) atk)
+                                   md)
+                            phase-mod)
+        env (e/env-gen:kr (e/env [0 1 1 0] [atk hold rel] :sine) :act :free)
+        sig (ops/* amp (pan/pan2:ar sig))
+        ;; Upstream freed via detect-silence alone, but its 0.1s default
+        ;; fires during the 15-45s fade-in (envelope still ~0), killing
+        ;; every voice before it sounds. Envelope :free owns the lifetime
+        ;; instead; silence detection would need attack-aware timing.
+        sig (ops/* env sig)]
+    (io/out:ar out (lim/limiter:ar sig 0.1))))
+  ;; Master stage: per-voice limiters cap individuals, but 47-voice clouds
+  ;; still sum hot. Fixed 0.7 trim + Compander backstop, same as eno-ending.
+  (sdef/defsynth :mix-limiter [bus 16]
+    (let [sig (io/in:ar bus 2)
+          sig (ops/* sig 0.5)]
+      (io/out:ar 0 (lim/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
 (defn -main [& [seed-arg secs-arg]]
   (let [s (server/make-external-server "example" :port 57138)
         seed (if seed-arg (Long/parseLong seed-arg) 12345)
@@ -150,9 +167,12 @@
     (binding [server/*s* s]
       (clock/start-clock-loop :tempo bpm)
       (clock/enable-backend! (backend/make-cl-collider-backend s))
+      (define-voice!)
+      ;; Private mix bus (0-15 hardware); master last so it hears the mix.
+      (sdef/synth :mix-limiter :bus 16 :pos :tail)
       (player seed)
       (Thread/sleep (* secs 1000))
-      ;; end lets loops finish their cycle; tails die via detect-silence.
+      ;; end lets loops finish their cycle; tails die on envelope end.
       (clock/end :drone)
       (Thread/sleep 5000))
     (server/server-quit s)
