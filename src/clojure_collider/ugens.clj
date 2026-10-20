@@ -261,11 +261,11 @@
 (import-vars clojure-collider.ugens.test-ugens
   check-bad-values:ar check-bad-values:kr sanitize:ar sanitize:kr)
 (import-vars clojure-collider.ugens.trig
-  clip:ar clip:ir clip:kr coyote:kr fold:ar fold:ir fold:kr gate:ar
+  clip clip:ar clip:ir clip:kr coyote:kr fold fold:ar fold:ir fold:kr gate:ar
   gate:kr in-range:ar in-range:kr last-value:ar last-value:kr latch:ar latch:kr least-change:ar
   least-change:kr most-change:ar most-change:kr peak-follower:ar peak-follower:kr peak:ar peak:kr phasor:ar
   phasor:kr pitch:kr pulse-count:ar pulse-count:kr pulse-divider:ar pulse-divider:kr running-max:ar running-max:kr
   running-min:ar running-min:kr schmidt:ar schmidt:kr send-peak-rms:ar send-peak-rms:kr send-reply:ar send-reply:kr
   send-trig:ar send-trig:kr set-reset-ff:ar set-reset-ff:kr stepper:ar stepper:kr sweep:ar sweep:kr
   t-delay:ar t-delay:kr timer:ar timer:kr toggle-ff:ar toggle-ff:kr trig-1:ar trig-1:kr
-  trig:ar trig:kr wrap:ar wrap:ir wrap:kr zero-crossing:ar zero-crossing:kr)
+  trig:ar trig:kr wrap wrap:ar wrap:ir wrap:kr zero-crossing:ar zero-crossing:kr)

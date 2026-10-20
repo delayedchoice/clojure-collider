@@ -109,7 +109,7 @@
   buf-info-ugen-base:ir buf-info-ugen-base:kr buf-rate-scale:ir buf-rate-scale:kr buf-rd:ar buf-rd:kr
   buf-sample-rate:ir buf-sample-rate:kr buf-samples:ir buf-samples:kr buf-wr:ar buf-wr:kr
   c-osc:ar c-osc:kr cd-skip:ar changed:ar changed:kr check-bad-values:ar
-  check-bad-values:kr chen:ar chen:kr clip-noise:ar clip-noise:kr clip:ar
+  check-bad-values:kr chen:ar chen:kr clip clip-noise:ar clip-noise:kr clip:ar
   clip:ir clip:kr coin-gate:ar coin-gate:kr comb-c:ar comb-c:kr
   comb-l:ar comb-l:kr comb-n:ar comb-n:kr compander-d:ar compander:ar
   control-dur:ir control-rate:ir convolution2-l:ar convolution2:ar convolution3:ar convolution3:kr
@@ -127,7 +127,7 @@
   env-asr env-dadsr env-detect:ar env-follow:ar env-follow:kr env-gen:ar
   env-gen:kr env-linen env-perc env-shape-number env-sine env-triangle
   exp-rand:ir f-sin-osc:ar f-sin-osc:kr faust-all faust:ar fbsine-c:ar
-  fbsine-l:ar fbsine-n:ar fft-trigger:kr fft:kr fitz-hugh-nagumo:ar fold:ar
+  fbsine-l:ar fbsine-n:ar fft-trigger:kr fft:kr fitz-hugh-nagumo:ar fold fold:ar
   fold:ir fold:kr formant:ar formlet:ar formlet:kr fos:ar
   fos:kr free-self-when-done:kr free-self:kr free:kr freeverb2:ar freeverb:ar
   freq-shift:ar g-verb:ar gate:ar gate:kr gauss-trig:ar gauss-trig:kr
@@ -228,7 +228,7 @@
   var-lag:ar var-lag:kr var-saw:ar var-saw:kr var-shape-osc:ar var-shape-osc:kr
   vibrato:ar vibrato:kr vm-scan2d:ar vosim-osc:ar vosim-osc:kr warp1:ar
   warpz:ar wave-terrain:ar waveset-repeater:ar waveset-repeater:kr weakly-nonlinear2:ar weakly-nonlinear:ar
-  white-noise:ar white-noise:kr wrap-index:ar wrap-index:kr wrap:ar wrap:ir
+  white-noise:ar white-noise:kr wrap wrap-index:ar wrap-index:kr wrap:ar wrap:ir
   wrap:kr x-fade2:ar x-fade2:kr x-line:ar x-line:kr x-out:ar
   x-out:kr z-osc:ar z-osc:kr zero-crossing:ar zero-crossing:kr)
 (import-vars clojure-collider.volume volume set-volume! mute unmute)

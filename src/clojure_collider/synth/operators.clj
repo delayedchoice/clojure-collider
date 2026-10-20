@@ -294,7 +294,13 @@
 ;; -- composition helpers ----------------------------------------------------------
 
 (defn if* [c t f]
-  (add (mul c (minus t f)) f))
+  ;; Number comparisons yield booleans (compare-dispatch); picking eagerly
+  ;; lets scalar operator graphs (fold:ir) fold to numbers. UGen
+  ;; conditions still build the mul-add graph. Booleans previously threw
+  ;; in multinew (no rate), so no working graph changes shape.
+  (if (boolean? c)
+    (if c t f)
+    (add (mul c (minus t f)) f)))
 
 (defn madd
   ([ug] (mul-add ug 1.0 0.0))

@@ -131,3 +131,23 @@
             caught 9/10/11-arg calls passing 14 fillers)"
     (doseq [n (range 14)]
       (is (some? (apply u/pokey-square:ar (repeat n 0))) (str "arity " n)))))
+
+(deftest clip-fold-wrap-dispatch
+  (testing "Trig.lisp defmethods: scalar folds to numbers, else unit at combined rate"
+    (is (== 440 (u/clip 440 20 20000)))
+    (is (== 20 (u/clip 5 20 20000)))
+    (is (== 20000 (u/clip 30000 20 20000)))
+    (is (== 0.5 (u/fold 1.5 0 1)))
+    (is (== 0.5 (u/wrap 1.5 0 1)))
+    (let [units (fn [thunk]
+                  (let [sd (synthdef/make-synthdef "t")]
+                    (binding [ugen/*synthdef* sd]
+                      (thunk)
+                      (synthdef/build-synthdef sd)
+                      (:children @sd))))
+          rate-of (fn [us nm]
+                    (:rate (some #(when (= nm (:name %)) %) us)))]
+      (is (= :audio (rate-of (units #(u/clip (car) 0 1)) "Clip")))
+      (is (= :control (rate-of (units #(u/clip (u/sin-osc:kr 440 0 1 0) 0 1)) "Clip")))
+      (is (= :audio (rate-of (units #(u/fold (car) 0 1)) "Fold")))
+      (is (= :control (rate-of (units #(u/wrap (u/sin-osc:kr 440 0 1 0) 0 1)) "Wrap"))))))

@@ -61,7 +61,7 @@ Status legend: `○ planned` · `◐ in progress` · `● done` · `— not port
 | 55 | `ugens/SoundIn.lisp` | `src/clojure_collider/ugens/sound_in.clj` | ● | Hand port (uses info-ugens num-output-buses) |
 | 56 | `ugens/Splay.lisp` | `src/clojure_collider/ugens/splay.clj` | ● | Hand port (pan2 composition) |
 | 57 | `ugens/TestUGens.lisp` | `src/clojure_collider/ugens/test_ugens.clj` | ● | Transpiled |
-| 58 | `ugens/Trig.lisp` | `src/clojure_collider/ugens/trig.clj` | ● | Transpiled + fold/clip/wrap:ir + send-reply/send-peak-rms |
+| 58 | `ugens/Trig.lisp` | `src/clojure_collider/ugens/trig.clj` | ● | Transpiled + fold/clip/wrap:ir + clip/fold/wrap dispatch methods + send-reply/send-peak-rms |
 | 59 | `ugens/SC3plugins/BhobUGens.lisp` | `src/clojure_collider/ugens/sc3plugins/bhob_ugens.clj` | ● | Transpiled + tgrains2/3 customs |
 | 60 | `ugens/SC3plugins/DEINDUGens.lisp` | `src/clojure_collider/ugens/sc3plugins/deind_ugens.clj` | ● | Hand port (greyhole/jpverb stereo pairs) |
 | 61 | `ugens/SC3plugins/DistortionPlugins.lisp` | `src/clojure_collider/ugens/sc3plugins/distortion_plugins.clj` | ● | Transpiled |

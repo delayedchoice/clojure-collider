@@ -7,6 +7,12 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
 ## Decided
+### 2026-10-20 — clip/fold/wrap rate-dispatch methods (upstream defmethods)
+- Upstream `clip`/`fold`/`wrap` dispatch on combined input rate (`:scalar` folds to numbers via `:ir` op graphs, else the unit at `:audio`/`:control`). Ported to `trig.clj`; facades re-export; drone voice uses `clip` (was forced `clip:ar`/`clip:kr`).
+- Why now, not just parity: an audio-rate `Clip` whose inputs are all scalars/consts segfaults scsynth 3.13 (NRT + silent live node) when a `Control` unit is present. Bytes are structurally valid; sibling `Fold` is immune. Forcing `:ar` (as the voice did for control proxies) emits exactly that shape. Dispatch never does: scalars fold, controls go `:kr` (verified renders).
+- `op/if*` picks eagerly on boolean conditions (number comparisons yield booleans). Previously any boolean condition threw in `multinew` (no rate), so no working graph changes shape; this un-breaks scalar `fold:ir`.
+- Status: decided
+
 ### 2026-10-20 — backend synth-control filtering (amends patterns port)
 - Only controls reach `/s_new`: reserved set grew to pitch keys (`:freq :midinote :note :degree :octave :root :scale :base-freq :base-note`, all consumed into resolved `:freq`) plus `:out-bus` (consumed into `:out`). Rationale: a keyword control (`:scale :major`) crashed the OSC encoder (`seq` on keyword), and vector pitch keys don't belong on the wire.
 - OSC encoder maps keywords/symbols to `s` strings (sclang parity) instead of throwing — backstop for any future non-numeric control.

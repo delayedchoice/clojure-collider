@@ -524,6 +524,43 @@
   ([in lo hi]
    (op/+ (op/mod (op/- in lo) (op/- hi lo)) lo)))
 
+(defn clip
+  "Port of Trig.lisp `clip' method: dispatches on combined input rate."
+  ([] (clip 0.0 0.0 1.0))
+  ([in] (clip in 0.0 1.0))
+  ([in lo] (clip in lo 1.0))
+  ([in lo hi]
+   ;; Upstream never emits an audio Clip with scalar-only inputs
+   ;; (scalar folds to numbers via clip:ir); scsynth 3.13 segfaults on
+   ;; that combination when a Control unit is present.
+   (case (ugen/rate [in lo hi])
+     :scalar (clip:ir in lo hi)
+     :audio (clip:ar in lo hi)
+     :control (clip:kr in lo hi))))
+
+(defn fold
+  "Port of Trig.lisp `fold' method: dispatches on combined input rate."
+  ([] (fold 0.0 0.0 1.0))
+  ([in] (fold in 0.0 1.0))
+  ([in lo] (fold in lo 1.0))
+  ([in lo hi]
+   (case (ugen/rate [in lo hi])
+     :scalar (fold:ir in lo hi)
+     :audio (fold:ar in lo hi)
+     :control (fold:kr in lo hi))))
+
+(defn wrap
+  "Port of Trig.lisp `wrap' method: dispatches on combined input rate."
+  ([] (wrap 0.0 0.0 1.0))
+  ([in] (wrap in 0.0 1.0))
+  ([in lo] (wrap in lo 1.0))
+  ([in lo hi]
+   (case (ugen/rate [in lo hi])
+     :scalar (wrap:ir in lo hi)
+     :audio (wrap:ar in lo hi)
+     :control (wrap:kr in lo hi))))
+
+
 (defn send-reply:ar
   "Port of Trig.lisp (send-reply \"SendReply\")."
   ([] (send-reply:ar 0.0 "/reply" nil -1))
