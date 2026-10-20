@@ -76,6 +76,9 @@
     (instance? Double x) \d
     (float? x) \f
     (string? x) \s
+    ;; sclang symbols travel as OSC strings; same here (and for keywords).
+    (keyword? x) \s
+    (symbol? x) \s
     (bytes? x) \b
     (instance? (Class/forName "[B") x) \b
     :else \b))
@@ -118,6 +121,8 @@
                        (instance? Double x) (encode-float64 (double x))
                        (float? x) (encode-float32 (float x))
                        (string? x) (osc-string-bytes x)
+                       (keyword? x) (osc-string-bytes (name x))
+                       (symbol? x) (osc-string-bytes (name x))
                        :else (sc-encode-blob (if (bytes? x) x (byte-array (map byte x))))))
                    flat)
         total (reduce + 0 (map alength parts))

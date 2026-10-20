@@ -7,6 +7,12 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
 ## Decided
+### 2026-10-20 — backend synth-control filtering (amends patterns port)
+- Only controls reach `/s_new`: reserved set grew to pitch keys (`:freq :midinote :note :degree :octave :root :scale :base-freq :base-note`, all consumed into resolved `:freq`) plus `:out-bus` (consumed into `:out`). Rationale: a keyword control (`:scale :major`) crashed the OSC encoder (`seq` on keyword), and vector pitch keys don't belong on the wire.
+- OSC encoder maps keywords/symbols to `s` strings (sclang parity) instead of throwing — backstop for any future non-numeric control.
+- Gate-0 release only for synths exposing a `gate` control (`gated-synth?`); percussive voices self-free.
+- Status: decided
+
 ### 2026-10-20 — cl-patterns MVP+scales port (src/patterns)
 - Source: `defaultxr/cl-patterns` v0.7 MIT, sibling checkout `../cl-patterns` (reference only, never committed). Scope: MVP slice (utility-RNG/helpers, conversions, event, value patterns + pbind/pb/pmono/pdef, backend + cl-collider backend, clock + play/stop) PLUS scales/chords/tunings. Deferred: track/cycles/pmeta/bjorklund/batch, render, MIDI/alsa/incudine backends, formats.
 - Model: CLOS classes become plain data maps `{:ptype ::patterns/pwhite ...}` + ONE generic `Stream` record `{:state (atom {...}) :step (fn [state] -> [v state'] | ::eop)}`. `pnext!` runs step, swaps state. `as-pstream`: Stream identity; pattern map -> fresh Stream; plain value -> infinite const stream; sequential -> infinite pseq. Pattern-valued length/repeats bounds NOT supported (MVP): number or `:inf` only.

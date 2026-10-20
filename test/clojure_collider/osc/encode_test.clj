@@ -74,3 +74,9 @@
       ;; message body starts at 20 (8 header + 8 timetag + 4 size);
       ;; int address 9 encodes as int32 0 0 0 9
       (is (bytes= (byte-array [0 0 0 9]) (Arrays/copyOfRange b 20 24))))))
+
+(deftest keyword-controls-encode-as-strings
+  (testing "keywords/symbols travel as OSC strings (sclang parity)"
+    (let [b (enc/encode-message "/s_new" "default" 1000 :major 'x)]
+      (is (bytes= (byte-array [44 115 105 115 115 0 0 0])
+                  (Arrays/copyOfRange b 8 16))))))

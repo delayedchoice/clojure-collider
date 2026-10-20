@@ -21,9 +21,11 @@
 
 (def reserved-keys
   "Event keys consumed by the clock/backend, never forwarded as synth controls.
-  Per DECISIONS.md 2026-10-20. :out-bus is consumed into the :out control."
+  Per DECISIONS.md 2026-10-20. Pitch keys resolve into :freq; :out-bus feeds
+  the :out control."
   #{:type :dur :delta :duration :sustain :legato :quant :play-quant
-    :beat :tempo :timing-offset :group :out :out-bus :backend})
+    :beat :tempo :timing-offset :group :out :out-bus :backend
+    :freq :midinote :note :degree :octave :root :scale :base-freq :base-note})
 
 (defn control-args
   "Strip reserved keys (plus :instrument) from EV, resolve :freq via

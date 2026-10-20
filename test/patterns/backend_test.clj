@@ -47,7 +47,8 @@
       (is (= 440 (:freq args))))
     (doseq [k [:type :dur :delta :legato :quant :play-quant :beat :tempo
                :timing-offset :group :out :backend :instrument :duration
-               :sustain]]
+               :sustain :midinote :note :degree :octave :root :scale
+               :base-freq :base-note]]
       (testing (str k " stripped")
         (is (not (contains? args k)))))))
 
