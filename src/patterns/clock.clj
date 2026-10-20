@@ -152,7 +152,8 @@
      (throw (ex-info "play: no clock; call start-clock-loop first" {})))
    (let [source (resolve-source x)
          stream (p/as-pstream source)
-         start (quant-next (or quant (:quant (when (map? source) source)))
+         start (quant-next (or quant (:quant (when (map? source) source))
+                               (:play-quant (when (map? source) source)))
                            (clock-beats clock))
          task {:id (swap! task-ids inc)
                :source source

@@ -5,10 +5,8 @@
 ;;
 ;; Two halves: (1) a mouse-played FM drone. On headless machines MouseX/Y sit
 ;; at fixed values, so it still renders, just statically. (2) a percussive FM
-;; voice with randomized params. The original's second half uses cl-patterns
-;; (pb/pexprand/pwhite/start-clock-loop), a separate upstream library this
-;; port does not include — the doseq + server/at loop below is the direct
-;; equivalent (32 eighth-notes, fresh random params per note).
+;; voice sequenced by a real cl-patterns pb (pwhite/pexprand params) on the
+;; patterns clock — the earlier hand-rolled doseq loop is gone.
 (ns fm-synthesis
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
@@ -19,10 +17,11 @@
             [clojure-collider.ugens.mac-ugens :as mouse]
             [clojure-collider.ugens.noise :as noise]
             [clojure-collider.ugens.poll :as poll]
-            [clojure-collider.ugens.pan :as pan]))
-
-;; pexprand = exponential-uniform draw over [lo hi]: uniform in log space.
-(defn- exprand [lo hi] (* lo (Math/pow (/ hi lo) (rand))))
+            [clojure-collider.ugens.pan :as pan]
+            [patterns.patterns :as p]
+            [patterns.pbind :as pb]
+            [patterns.backend :as backend]
+            [patterns.clock :as clock]))
 
 (defn -main [& _]
   (let [s (server/make-external-server "example" :port 57134)]
@@ -41,7 +40,7 @@
                                                0 (ops/range (noise/lf-noise0:kr 8) 20 10000)))
                                       0 0.2))))]
         (Thread/sleep 6000)
-        (server/node-free s (:id drone)))
+        (server/node-free drone))
       ;; Percussive FM voice: carrier + one modulator, perc envelope frees the
       ;; synth (like upstream :act :free), panned stereo out.
       (sdef/defsynth :fm [car-hz 500 mod-hz 100 mod-amp 200 atk 0.01 rel 1 amp 0.2 pan 0]
@@ -50,17 +49,23 @@
                                                                 (osc/sin-osc:ar mod-hz 0 mod-amp)))
                                          amp)
                                   pan)))
-      (let [t0 (server/now)]
-        (doseq [i (range 32)]
-          (server/at (+ t0 (* i 0.25))
-                     (sdef/synth :fm
-                                 :car-hz (exprand 20 10000)
-                                 :mod-hz (exprand 20 10000)
-                                 :mod-amp (rand 10000)
-                                 :amp (exprand 0.1 0.5)
-                                 :atk (exprand 0.001 0.05)
-                                 :rel (exprand 0.05 1.2)
-                                 :pan (- (rand 2.0) 1.0)))))
-      (Thread/sleep 12000))
+      ;; The pattern half: 32 eighth-notes (dur 1/8 at 60 BPM), every param
+      ;; drawn fresh per note — pexprand for the exponential FM ranges,
+      ;; pwhite for the uniform ones. Replaces the hand-rolled server/at loop.
+      (clock/start-clock-loop :tempo 60)
+      (clock/enable-backend! (backend/make-cl-collider-backend s))
+      (pb/pb :p
+        :instrument :fm
+        :dur 1/8
+        :car-hz (p/pexprand 20 10000)
+        :mod-hz (p/pexprand 20 10000)
+        :mod-amp (p/pwhite 0 10000)
+        :amp (p/pexprand 0.1 0.5)
+        :atk (p/pexprand 0.001 0.05)
+        :rel (p/pexprand 0.05 1.2)
+        :pan (p/pwhite -1.0 1.0))
+      (clock/play :p)
+      (Thread/sleep 12000)
+      (clock/stop :p))
     (server/server-quit s)
     (println :done)))

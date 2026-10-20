@@ -8,7 +8,10 @@
   (is (= 1 (e/env-shape-number :lin)))
   (is (= 2 (e/env-shape-number :exp)))
   (is (= 5 (e/env-shape-number 2.5)))
-  (is (thrown? clojure.lang.ExceptionInfo (e/env-shape-number :bogus))))
+  (is (thrown? clojure.lang.ExceptionInfo (e/env-shape-number :bogus)))
+  (testing "control proxies count as custom curves (FM-2 index envelopes)"
+    (is (= 5 (e/env-shape-number
+              (ugen/->ProxyOutput nil :control :bipolar 0 0 -1 nil nil))))))
 
 (deftest env-array-layout
   ;; [init num-segs release loop seg...], segs [level time shape curve]

@@ -20,6 +20,6 @@
         (Thread/sleep 800)
         (server/ctrl n :note 72)
         (Thread/sleep 800)
-        (server/node-free s (:id n))))
+        (server/node-free n)))
     (server/server-quit s)
     (println :done)))

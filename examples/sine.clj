@@ -11,6 +11,6 @@
     (binding [server/*s* s]
       (let [n (sdef/play (osc/sin-osc:ar [320 321] 0 0.2 0))]
         (Thread/sleep 1500)
-        (server/node-free s (:id n))))
+        (server/node-free n)))
     (server/server-quit s)
     (println :done)))

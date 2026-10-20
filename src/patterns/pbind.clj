@@ -31,8 +31,8 @@
   - A merged map containing `:instrument` or `:type` is passed through
     the event constructor, so the result is a full event map.
 
-  Deferred (upstream `pbind` wrap keys): `:pfor :pfin :pfindur :psync
-  :pr :pn :ptrace :pmeta :pchain`. Passing any of these to `pbind`
+  Deferred (upstream `pbind` wrap keys): `:pfor :psync :pr :pn
+  :ptrace :pmeta :pchain`. Passing any of these to `pbind`
   throws with a `:deferred` marker; likewise `pb`'s arithmetic
   auto-translation (`+` -> `p+` etc.) is NOT ported. Both are documented
   here so a later slice can pick them up without guessing."
@@ -104,7 +104,7 @@
 
 (def ^:private deferred-keys
   "Upstream pbind wrap keys deferred to a later slice."
-  #{:pfor :pfin :pfindur :psync :pr :pn :ptrace :pmeta :pchain})
+  #{:pfor :psync :pr :pn :ptrace :pmeta :pchain})
 
 (defn pbind
   "Build an event pattern from key/value PAIRS. Each value becomes a child
@@ -118,12 +118,18 @@
   (loop [kvs   (partition 2 pairs)
          faced []          ; flat [k v ...] in encounter order
          fns   #{}
-         loop? nil]
+         loop? nil
+         pfin nil
+         pfindur nil
+         playq nil]
     (if (empty? kvs)
-      {:ptype ::p/pbind
-       :pairs faced
-       :fns   fns
-       :loop  loop?}
+      (cond-> {:ptype ::p/pbind
+               :pairs faced
+               :fns   fns
+               :loop  loop?}
+        pfin    (assoc :pfin pfin)
+        pfindur (assoc :pfindur pfindur)
+        playq   (assoc :play-quant playq))
       (let [[k v]    (first kvs)
             rest-kvs (rest kvs)]
         (cond
@@ -132,18 +138,24 @@
                           {:key k :deferred true}))
 
           (= k :loop)
-          (recur rest-kvs faced fns (boolean v))
+          (recur rest-kvs faced fns (boolean v) pfin pfindur playq)
+
+          (and (#{:pfin :pfindur :play-quant} k) (number? v))
+          (recur rest-kvs faced fns loop?
+                 (if (= k :pfin) v pfin)
+                 (if (= k :pfindur) v pfindur)
+                 (if (= k :play-quant) v playq))
 
           ;; Plain map only: records (Stream, Prest) and pattern maps
           ;; (:ptype) stream per step instead.
           (and (= k :embed) (map? v) (not (record? v)) (not (contains? v :ptype)))
-          (recur rest-kvs (into faced (apply concat (seq v))) fns loop?)
+          (recur rest-kvs (into faced (apply concat (seq v))) fns loop? pfin pfindur playq)
 
           (fn? v)
-          (recur rest-kvs (conj faced k v) (conj fns k) loop?)
+          (recur rest-kvs (conj faced k v) (conj fns k) loop? pfin pfindur playq)
 
           :else
-          (recur rest-kvs (conj faced k v) fns loop?))))))
+          (recur rest-kvs (conj faced k v) fns loop? pfin pfindur playq))))))
 
 (defn pmono
   "Mono event pattern: like `pbind` with `:instrument` set and
@@ -208,7 +220,22 @@
             (recur more (assoc acc k v))))))))
 
 (defmethod p/build-stream ::p/pbind
-  [{:keys [pairs]}]
+  [{:keys [pairs pfin pfindur]}]
   (let [children (mapv (fn [[k v]] [k (if (fn? v) v (p/as-pstream v))])
-                       (partition 2 pairs))]
-    (p/->Stream (atom {:children children}) (pbind-step children))))
+                       (partition 2 pairs))
+        inner    (pbind-step children)]
+    ;; :pfin caps the event count, :pfindur caps accumulated :dur beats;
+    ;; the step that reaches the cap still yields, the next one ends.
+    (p/->Stream (atom {:children children :emitted 0 :beats 0.0})
+                (fn [{:keys [emitted beats] :as st}]
+                  (if (or (and pfin (>= emitted pfin))
+                          (and pfindur (>= beats pfindur)))
+                    eop
+                    (let [r (inner st)]
+                      ;; inner yields [event state] or bare eop
+                      (if (p/eop? r)
+                        r
+                        (let [[v st'] r
+                              d (double (or (event/event-value v :dur) 1))]
+                          [v (assoc st' :emitted (inc emitted)
+                                       :beats (+ beats d))]))))))))

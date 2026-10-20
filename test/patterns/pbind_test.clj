@@ -89,3 +89,20 @@
       (is false "should have thrown")
       (catch clojure.lang.ExceptionInfo ex
         (is (true? (:deferred (ex-data ex))))))))
+
+(deftest pfin-pfindur-limits
+  (let [pulln (fn [pat n]
+                (let [s (p/as-pstream pat)]
+                  (vec (repeatedly n #(p/pnext! s)))))]
+    (testing ":pfin caps the event count"
+      (is (= [{:note 1} {:note 2} {:note 3} {:note 1} :patterns.util/eop]
+             (pulln (pb/pbind :note (p/pseq [1 2 3] :inf) :pfin 4) 5))))
+    (testing ":pfindur caps accumulated :dur beats"
+      (let [got (pulln (pb/pbind :dur 1/2 :pfindur 4) 10)]
+        (is (= 8 (count (remove #(= :patterns.util/eop %) got))))
+        (is (= :patterns.util/eop (nth got 8)))))
+    (testing "limits are init keys, not streamed children"
+      (let [pat (pb/pbind :note 1 :pfin 2 :play-quant 4)]
+        (is (= 2 (:pfin pat)))
+        (is (= 4 (:play-quant pat)))
+        (is (not (some #{:pfin :play-quant} (map first (partition 2 (:pairs pat))))))))))

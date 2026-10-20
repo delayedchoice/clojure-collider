@@ -14,11 +14,12 @@
    :sin 3 :sine 3 :wel 4 :welch 4 :sqr 6 :cub 7 :cubed 7 :hold 8})
 
 (defn env-shape-number
-  "Keyword -> table entry (error on unknown); UGen/number -> 5 (custom curve)."
+  "Keyword -> table entry (error on unknown); UGen/number -> 5 (custom curve).
+   Control proxies count: upstream modulates curves with control UGens."
   [c]
   (cond (keyword? c) (or (get shape-table c)
                          (throw (ex-info "not a valid envelope curve" {:curve c})))
-        (ugen/ugen-like? c) 5
+        (or (ugen/ugen-like? c) (ugen/proxy-output? c)) 5
         (number? c) 5
         :else (throw (ex-info "not a valid envelope curve" {:curve c}))))
 
