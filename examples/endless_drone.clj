@@ -4,7 +4,7 @@
 ;;     fork{loop{Ndef(\a,{Klank.ar(`[9.collect{[5000.0.rand,5000.0.rand]},
 ;;                                nil,1!4],PinkNoise.ar(7e-3))/3});9.wait}}
 ;; Run: clojure -M -m endless-drone [seed=7] [seconds=90]
-;;   (boots its own scsynth)
+;;   (boots its own scsynth; seconds 0 = play until Ctrl-C)
 ;;
 ;; Translation notes (SuperCollider -> here):
 ;; - The SC spec rows are 9 [5000.rand, 5000.rand] pairs with amps nil:
@@ -77,8 +77,14 @@
       (p/start-clock-loop :tempo bpm)
       (define-voice!)
       (player)
-      (Thread/sleep (* secs 1000))
-      (p/end :endpat)
-      (Thread/sleep (* (+ iteration-secs fade-secs) 1000)))
+      (if (pos? secs)
+        (do (Thread/sleep (* secs 1000))
+            (p/end :endpat)
+            (Thread/sleep (* (+ iteration-secs fade-secs) 1000)))
+        (do (println :playing-forever-ctrl-c-to-stop)
+            (.addShutdownHook (Runtime/getRuntime)
+              (Thread. ^Runnable (fn [] (server/server-quit s))))
+            (while true
+              (Thread/sleep 60000)))))
     (server/server-quit s)
     (println :done)))
