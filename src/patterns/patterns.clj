@@ -350,8 +350,8 @@
 (defn- embed-pick-step
   "Shared pull for prand/pxrand: hold a picked pattern's stream across
   pulls until it ends, then re-pick (SC list-pattern embedding). Plain
-  values yield directly. `pick` draws a fresh element from ITEMS."
-  [items st pick]
+  values yield directly. `pick` draws a fresh element (0-arity)."
+  [st pick]
   (loop [sub (:sub st)]
     (if sub
       (let [v (pnext! sub)]
@@ -379,7 +379,7 @@
                                          {:value items})))]
              (when (empty? items)
                (throw (ex-info "patterns: prand list must not be empty" {})))
-             (embed-pick-step items st
+             (embed-pick-step st
                #(nth items (u/rand-int-range 0 (dec (count items))))))))))))
 
 (defn pxrand
