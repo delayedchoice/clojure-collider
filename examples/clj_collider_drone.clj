@@ -212,22 +212,17 @@
         :else s))
 
 (defn -live-main [& [seed-arg secs-arg fade-arg device-arg]]
-  ;; Dense overlapping runs + per-voice Limiter lookahead buffers: raise
-  ;; the RT pool and the node table like the earlier drone sketch needed.
-  (let [device (resolve-device device-arg)
-        _ (when device (println :device device))
-        s (server/make-external-server
-             "example" :port 57138
-             :options (opts/make-server-options {:realtime-mem-size 65536
-                                                 :max-num-nodes 4096
-                                                 :device device}))
-        seed (if seed-arg (Long/parseLong seed-arg) 2160)
+  (let [seed (if seed-arg (Long/parseLong seed-arg) 2160)
         secs (if secs-arg (Long/parseLong secs-arg) 45)
-        fade (if fade-arg (Long/parseLong fade-arg) 5)]
-    (server/server-boot s)
-    (binding [server/*s* s]
-      (p/start-clock-loop :tempo bpm)
-      ;; No explicit backend: play auto-enables one on the booted *s*.
+        fade (if fade-arg (Long/parseLong fade-arg) 5)
+        device (resolve-device device-arg)
+        _ (when device (println :device device))]
+    (binding [server/*s* (p/setup-performance!
+                           :seed seed :port 57138 :tempo bpm :name "example"
+                           :options (opts/make-server-options
+                                     {:realtime-mem-size 65536
+                                      :max-num-nodes 4096
+                                      :device device}))]
       (define-voice!)
       (let [master (sdef/synth :mix-limiter :bus 16 :pos :tail)]
         (player seed)
@@ -236,6 +231,6 @@
         (doseq [i (range 20 0 -1)]
           (server/ctrl master :amp (/ (dec i) 20.0))
           (Thread/sleep (long (/ (* fade 1000) 20))))
-        (Thread/sleep 2000)))
-    (server/server-quit s)
+        (Thread/sleep 2000)
+        (server/server-quit server/*s*)))
     (println :done)))

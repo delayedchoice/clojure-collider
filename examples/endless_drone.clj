@@ -16,15 +16,11 @@
 ;;   No gate, no previous-voice kill - possible only because the 9s
 ;;   period is fixed and known.
 ;; - Limiter at 0.8 is a safety net only; sane levels never touch it.
-;; - The forked loop is a looping pbind (:dur 9); the only sleeps left
-;;   are the run duration and the release tail.
 (ns endless-drone
   (:require [clojure-collider.server.server :as server]
-            [clojure-collider.server.options :as opts]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [ugens :as ug]
-            [patterns.util :as u]
             [pattern :as p]))
 
 (def bpm 120)
@@ -66,15 +62,10 @@
 
 (defn -main [& [seed-arg secs-arg]]
   (let [seed (if seed-arg (Long/parseLong seed-arg) 7)
-        secs (if secs-arg (Long/parseLong secs-arg) 90)
-        s (server/make-external-server
-           "example" :port 57139
-           :options (opts/make-server-options {:realtime-mem-size 65536
-                                               :max-num-nodes 4096}))]
-    (u/seed-rng! seed)
-    (server/server-boot s)
-    (binding [server/*s* s]
-      (p/start-clock-loop :tempo bpm)
+        secs (if secs-arg (Long/parseLong secs-arg) 90)]
+    (binding [server/*s* (p/setup-performance!
+                           :seed seed :port 57139 :tempo bpm
+                           :name "endless")]
       (define-voice!)
       (player)
       (if (pos? secs)
@@ -83,8 +74,8 @@
             (Thread/sleep (* (+ iteration-secs fade-secs) 1000)))
         (do (println :playing-forever-ctrl-c-to-stop)
             (.addShutdownHook (Runtime/getRuntime)
-              (Thread. ^Runnable (fn [] (server/server-quit s))))
+              (Thread. ^Runnable
+                (fn [] (server/server-quit server/*s*))))
             (while true
               (Thread/sleep 60000)))))
-    (server/server-quit s)
     (println :done)))

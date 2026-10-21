@@ -12,7 +12,8 @@
             [patterns.pbind :as pbind]
             [patterns.backend :as backend]
             [clojure-collider.server.scheduler :as sched]
-            [clojure-collider.server.server :as server]))
+            [clojure-collider.server.server :as server]
+            [clojure-collider.server.options :as opts]))
 
 ;; -- clock --------------------------------------------------------------------
 
@@ -57,6 +58,25 @@
    (swap! (:enabled-backends clock)
           (fn [bs] (vec (remove #(identical? % b) bs))))
    b))
+
+(defn setup-performance!
+  "One-call live rig: seed the pattern RNG, boot an external scsynth,
+  start the pattern clock. Returns the booted server - bind it:
+  (binding [server/*s* (setup-performance! :seed 7)] ...).
+  play auto-enables a sounding backend on the booted *s*, so no backend
+  wiring is needed. Defaults suit dense polyphonic examples."
+  [& {:keys [seed port tempo name options]
+      :or {seed 7 port 57138 tempo 120 name "example"}}]
+  (u/seed-rng! seed)
+  (let [s (server/make-external-server
+             name :port port
+             :options (or options
+                          (opts/make-server-options
+                           {:realtime-mem-size 65536
+                            :max-num-nodes 4096})))]
+    (server/server-boot s)
+    (start-clock-loop :tempo tempo)
+    s))
 
 ;; -- beats / quant --------------------------------------------------------------
 
