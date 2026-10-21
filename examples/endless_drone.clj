@@ -8,22 +8,24 @@
 ;;
 ;; Translation notes (SuperCollider -> here):
 ;; - The SC spec rows are 9 [5000.rand, 5000.rand] pairs with amps nil:
-;;   freqs are drawn fresh per iteration into 9 `fN` controls, amps stay
-;;   1.0 (decays default to 1.0; the SC `1!4` only supplies four). This
-;;   matches the SC, where the 5000-range values evidently never reach
-;;   the amps.
+;;   freqs stream from nine `pwhite` keys, amps stay 1.0 (decays default
+;;   to 1.0; the SC `1!4` only supplies four). This matches the SC, where
+;;   the 5000-range values evidently never reach the amps.
 ;; - Ndef crossfade (fadeTime 15) = fixed 24s voice life, self-freeing:
 ;;   attack to 0.6 over the 9s period, full at +15s, silent by +24s.
 ;;   No gate, no previous-voice kill - possible only because the 9s
 ;;   period is fixed and known.
 ;; - Limiter at 0.8 is a safety net only; sane levels never touch it.
+;; - The forked loop is a looping pbind (:dur 9); the only sleeps left
+;;   are the run duration and the release tail.
 (ns endless-drone
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.server.options :as opts]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [ugens :as ug]
-            [patterns.util :as u]))
+            [patterns.util :as u]
+            [pattern :as p]))
 
 (def bpm 120)
 (def iteration-secs 9)
@@ -31,17 +33,14 @@
 (def amp-scale (/ 1.0 3.0))
 
 (defn define-voice!
-  "Single :endless def. Fixed 24s life (9s period + 15s fade): attack to
-  0.6 over the first period, full at +15s, released by +24s - exactly the
-  Ndef crossfade, self-freeing, so no gate and no previous-voice kill.
-  (Possible only because the 9s period is fixed and known.)"
+  "Single :endless def. Fixed 24s life (9s period + 15s fade),
+  self-freeing - see header."
   []
   (sdef/defsynth :endless
     [f0 440 f1 440 f2 440 f3 440 f4 440 f5 440 f6 440 f7 440 f8 440
-     a0 1.0 a1 1.0 a2 1.0 a3 1.0 a4 1.0 a5 1.0 a6 1.0 a7 1.0 a8 1.0
      out 0]
     (let [res (ug/klank:ar [[f0 f1 f2 f3 f4 f5 f6 f7 f8]
-                            [a0 a1 a2 a3 a4 a5 a6 a7 a8]
+                            [1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0]
                             nil]
                            (ug/pink-noise:ar 7e-3))
           env (ug/env-gen:kr (ug/env [0 (/ iteration-secs fade-secs) 1 0]
@@ -52,22 +51,18 @@
           sig (ops/* res env)]
       (ug/out:ar out (ug/limiter:ar (ops/* sig amp-scale) 0.8)))))
 
-(defn- draw-partials
-  "Nine [freq amp] pairs: freqs uniform in [0, 5000), amps unity.
-  (The SC spec rows are 9 [5000.rand, 5000.rand] pairs with amps nil -
-  in SC this evidently does NOT apply the 5000-range values as amps
-  (it sounds fine there), so amps stay 1.0 and only freqs are drawn.)"
+(defn create-phrase
+  "Looping pbind: every 9 beats a fresh 9-partial chord on :endless."
   []
-  (repeatedly 9 (fn [] [(u/rand-range 0 5000) 1.0])))
+  (apply p/pbind :dur iteration-secs :instrument :endless
+         (mapcat (fn [i] [(keyword (str "f" i)) (p/pwhite 0 5000)])
+                 (range 9))))
 
-(defn- start-voice!
-  "Start one iteration's voice."
-  [pairs]
-  (let [ks (mapcat (fn [i [f a]]
-                     [(keyword (str "f" i)) f (keyword (str "a" i)) a])
-                   (range)
-                   pairs)]
-    (apply sdef/synth :endless ks)))
+(defn player []
+  (p/stop)
+  (p/start-clock-loop :tempo bpm)
+  (p/pdef :endpat (create-phrase))
+  (p/play :endpat))
 
 (defn -main [& [seed-arg secs-arg]]
   (let [seed (if seed-arg (Long/parseLong seed-arg) 7)
@@ -79,12 +74,11 @@
     (u/seed-rng! seed)
     (server/server-boot s)
     (binding [server/*s* s]
+      (p/start-clock-loop :tempo bpm)
       (define-voice!)
-      (loop [deadline (+ (System/currentTimeMillis) (* secs 1000))]
-        (start-voice! (draw-partials))
-        (Thread/sleep (* iteration-secs 1000))
-        (if (< (System/currentTimeMillis) deadline)
-          (recur deadline)
-          (Thread/sleep (* (+ iteration-secs fade-secs) 1000)))))
+      (player)
+      (Thread/sleep (* secs 1000))
+      (p/end :endpat)
+      (Thread/sleep (* (+ iteration-secs fade-secs) 1000)))
     (server/server-quit s)
     (println :done)))
