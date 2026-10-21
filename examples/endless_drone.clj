@@ -7,13 +7,14 @@
 ;;   (boots its own scsynth)
 ;;
 ;; Translation notes (SuperCollider -> here):
-;; - The SC spec rows are 9 [freq amp] pairs with 5000.rand components;
-;;   they become 9 `fN`/`aN` voice controls drawn fresh per iteration
-;;   (decays default to 1.0; the SC `1!4` only supplies four).
+;; - The SC spec rows are 9 [5000.rand, 5000.rand] pairs with amps nil:
+;;   freqs are drawn fresh per iteration into 9 `fN` controls, amps stay
+;;   1.0 (decays default to 1.0; the SC `1!4` only supplies four). This
+;;   matches the SC, where the 5000-range values evidently never reach
+;;   the amps.
 ;; - Ndef crossfade (fadeTime 15) = overlap: each voice attacks over 15s
 ;;   while the previous one is gated off to a 15s release.
-;; - Amps are faithful to the SC (0..5000 / 3): extremely hot. Lower
-;;   `amp-scale` if you value your speakers.
+;; - Limiter at 0.8 is a safety net only; sane levels never touch it.
 (ns endless-drone
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.server.options :as opts]
@@ -43,12 +44,15 @@
                                     [fade-secs 3600 fade-secs] :sine)
                              :gate gate :act :free)
           sig (ops/* res env)]
-      (ug/out:ar out (ops/* sig amp-scale)))))
+      (ug/out:ar out (ug/limiter:ar (ops/* sig amp-scale) 0.8)))))
 
 (defn- draw-partials
-  "Nine [freq amp] pairs, components uniform in [0, 5000)."
+  "Nine [freq amp] pairs: freqs uniform in [0, 5000), amps unity.
+  (The SC spec rows are 9 [5000.rand, 5000.rand] pairs with amps nil -
+  in SC this evidently does NOT apply the 5000-range values as amps
+  (it sounds fine there), so amps stay 1.0 and only freqs are drawn.)"
   []
-  (repeatedly 9 (fn [] [(u/rand-range 0 5000) (u/rand-range 0 5000)])))
+  (repeatedly 9 (fn [] [(u/rand-range 0 5000) 1.0])))
 
 (defn- start-voice!
   "Start one iteration's voice; returns the node."
