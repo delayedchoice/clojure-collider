@@ -12,8 +12,10 @@
 ;;   1.0 (decays default to 1.0; the SC `1!4` only supplies four). This
 ;;   matches the SC, where the 5000-range values evidently never reach
 ;;   the amps.
-;; - Ndef crossfade (fadeTime 15) = overlap: each voice attacks over 15s
-;;   while the previous one is gated off to a 15s release.
+;; - Ndef crossfade (fadeTime 15) = fixed 24s voice life, self-freeing:
+;;   attack to 0.6 over the 9s period, full at +15s, silent by +24s.
+;;   No gate, no previous-voice kill - possible only because the 9s
+;;   period is fixed and known.
 ;; - Limiter at 0.8 is a safety net only; sane levels never touch it.
 (ns endless-drone
   (:require [clojure-collider.server.server :as server]
@@ -29,20 +31,24 @@
 (def amp-scale (/ 1.0 3.0))
 
 (defn define-voice!
-  "Single :endless def. Partial freqs/amps arrive per iteration as control
-  values; gate 0 frees the voice after its release."
+  "Single :endless def. Fixed 24s life (9s period + 15s fade): attack to
+  0.6 over the first period, full at +15s, released by +24s - exactly the
+  Ndef crossfade, self-freeing, so no gate and no previous-voice kill.
+  (Possible only because the 9s period is fixed and known.)"
   []
   (sdef/defsynth :endless
     [f0 440 f1 440 f2 440 f3 440 f4 440 f5 440 f6 440 f7 440 f8 440
      a0 1.0 a1 1.0 a2 1.0 a3 1.0 a4 1.0 a5 1.0 a6 1.0 a7 1.0 a8 1.0
-     gate 1 out 0]
+     out 0]
     (let [res (ug/klank:ar [[f0 f1 f2 f3 f4 f5 f6 f7 f8]
                             [a0 a1 a2 a3 a4 a5 a6 a7 a8]
                             nil]
                            (ug/pink-noise:ar 7e-3))
-          env (ug/env-gen:kr (ug/env [0 1 1 0]
-                                    [fade-secs 3600 fade-secs] :sine)
-                             :gate gate :act :free)
+          env (ug/env-gen:kr (ug/env [0 (/ iteration-secs fade-secs) 1 0]
+                                    [iteration-secs
+                                     (- fade-secs iteration-secs)
+                                     fade-secs] :sine)
+                             :act :free)
           sig (ops/* res env)]
       (ug/out:ar out (ug/limiter:ar (ops/* sig amp-scale) 0.8)))))
 
@@ -55,13 +61,13 @@
   (repeatedly 9 (fn [] [(u/rand-range 0 5000) 1.0])))
 
 (defn- start-voice!
-  "Start one iteration's voice; returns the node."
+  "Start one iteration's voice."
   [pairs]
   (let [ks (mapcat (fn [i [f a]]
                      [(keyword (str "f" i)) f (keyword (str "a" i)) a])
                    (range)
                    pairs)]
-    (apply sdef/synth :endless :gate 1 ks)))
+    (apply sdef/synth :endless ks)))
 
 (defn -main [& [seed-arg secs-arg]]
   (let [seed (if seed-arg (Long/parseLong seed-arg) 7)
@@ -74,14 +80,11 @@
     (server/server-boot s)
     (binding [server/*s* s]
       (define-voice!)
-      (loop [prev nil deadline (+ (System/currentTimeMillis) (* secs 1000))]
-        (let [node (start-voice! (draw-partials))]
-          (when prev
-            (server/ctrl prev :gate 0))
-          (Thread/sleep (* iteration-secs 1000))
-          (if (< (System/currentTimeMillis) deadline)
-            (recur node deadline)
-            (do (server/ctrl node :gate 0)
-                (Thread/sleep (* fade-secs 1000)))))))
+      (loop [deadline (+ (System/currentTimeMillis) (* secs 1000))]
+        (start-voice! (draw-partials))
+        (Thread/sleep (* iteration-secs 1000))
+        (if (< (System/currentTimeMillis) deadline)
+          (recur deadline)
+          (Thread/sleep (* (+ iteration-secs fade-secs) 1000)))))
     (server/server-quit s)
     (println :done)))
