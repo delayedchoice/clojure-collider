@@ -214,7 +214,7 @@
   sound-in:ar spec-centroid:kr spec-flatness:kr spec-pcile:kr splay-fill splay:ar
   splay:kr spring:ar spring:kr spruce-budworm:ar standard-l:ar standard-n:ar
   stepper:ar stepper:kr stereo-convolution2-l:ar streson:ar streson:kr string-voice:ar
-  subsample-offset:ir sweep:ar sweep:kr sync-saw:ar sync-saw:kr t-ball:ar
+  subsample-offset:ir svf:ar svf:kr sweep:ar sweep:kr sync-saw:ar sync-saw:kr t-ball:ar
   t-ball:kr t-beta-rand:ar t-beta-rand:kr t-bjorklund:ar t-bjorklund:kr t-brown-rand:ar
   t-brown-rand:kr t-choose:ar t-choose:kr t-delay:ar t-delay:kr t-duty:ar
   t-duty:kr t-exp-rand:ar t-exp-rand:kr t-gauss-rand:ar t-gauss-rand:kr t-rand:ar

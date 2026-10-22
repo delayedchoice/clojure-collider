@@ -46,3 +46,10 @@
     (let [names (graph-names io/out:kr #(flt/changed:kr (osc/sin-osc:kr 440)))]
       (is (some #{"HPZ1"} names))
       (is (some #{"BinaryOpUGen"} names)))))
+
+(deftest svf-shape
+  (testing "SVF.ar(in, cutoff, res, lp, bp, hp) emits one SVF unit"
+    (let [names (graph-names io/out:ar
+                             #(flt/svf:ar (osc/saw:ar 110) 800 0.9 0 1 0))]
+      (is (some #{"SVF"} names))
+      (is (some #{"Saw"} names)))))

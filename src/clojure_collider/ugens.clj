@@ -146,7 +146,7 @@
   lpz-2:ar lpz-2:kr median:ar median:kr mid-eq:ar mid-eq:kr one-pole:ar one-pole:kr
   one-zero:ar one-zero:kr ramp:ar ramp:kr resonz:ar resonz:kr rhpf:ar rhpf:kr
   ringz:ar ringz:kr rlpf:ar rlpf:kr slew:ar slew:kr slope:ar slope:kr
-  sos:ar sos:kr two-pole:ar two-pole:kr two-zero:ar two-zero:kr var-lag:ar var-lag:kr)
+  sos:ar sos:kr svf:ar svf:kr two-pole:ar two-pole:kr two-zero:ar two-zero:kr var-lag:ar var-lag:kr)
 (import-vars clojure-collider.ugens.free-verb
   freeverb2:ar freeverb:ar)
 (import-vars clojure-collider.ugens.fsin-osc

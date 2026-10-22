@@ -918,3 +918,35 @@
   ([in amp & {:keys [time act] :or {time 0.1 act :no-action}}]
    (ugen/multinew (fn [cls in amp time act] (ugen/ugen-new "DetectSilence" :control cls ugen/check-same-rate-as-first-input :bipolar in amp time (ugen/act act)))
                            'ugen in amp time act)))
+
+(defn svf:ar
+  "State Variable Filter (not in upstream Filter.lisp; SC semantics:
+   SVF.ar(in, cutoff, res, lowpass, bandpass, highpass, mul, add))."
+  ([] (svf:ar 0.0 1000.0 0.7 0.0 0.0 0.0 1.0 0.0))
+  ([in] (svf:ar in 1000.0 0.7 0.0 0.0 0.0 1.0 0.0))
+  ([in cutoff] (svf:ar in cutoff 0.7 0.0 0.0 0.0 1.0 0.0))
+  ([in cutoff res] (svf:ar in cutoff res 0.0 0.0 0.0 1.0 0.0))
+  ([in cutoff res lowpass] (svf:ar in cutoff res lowpass 0.0 0.0 1.0 0.0))
+  ([in cutoff res lowpass bandpass] (svf:ar in cutoff res lowpass bandpass 0.0 1.0 0.0))
+  ([in cutoff res lowpass bandpass highpass] (svf:ar in cutoff res lowpass bandpass highpass 1.0 0.0))
+  ([in cutoff res lowpass bandpass highpass mul] (svf:ar in cutoff res lowpass bandpass highpass mul 0.0))
+  ([in cutoff res lowpass bandpass highpass mul add]
+   (op/madd (ugen/multinew (fn [cls in cutoff res lowpass bandpass highpass] (ugen/ugen-new "SVF" :audio cls ugen/check-same-rate-as-first-input :bipolar in cutoff res lowpass bandpass highpass))
+                           'pure-ugen in cutoff res lowpass bandpass highpass)
+            mul add)))
+
+(defn svf:kr
+  "State Variable Filter (not in upstream Filter.lisp; SC semantics:
+   SVF.kr(in, cutoff, res, lowpass, bandpass, highpass, mul, add))."
+  ([] (svf:kr 0.0 1000.0 0.7 0.0 0.0 0.0 1.0 0.0))
+  ([in] (svf:kr in 1000.0 0.7 0.0 0.0 0.0 1.0 0.0))
+  ([in cutoff] (svf:kr in cutoff 0.7 0.0 0.0 0.0 1.0 0.0))
+  ([in cutoff res] (svf:kr in cutoff res 0.0 0.0 0.0 1.0 0.0))
+  ([in cutoff res lowpass] (svf:kr in cutoff res lowpass 0.0 0.0 1.0 0.0))
+  ([in cutoff res lowpass bandpass] (svf:kr in cutoff res lowpass bandpass 0.0 1.0 0.0))
+  ([in cutoff res lowpass bandpass highpass] (svf:kr in cutoff res lowpass bandpass highpass 1.0 0.0))
+  ([in cutoff res lowpass bandpass highpass mul] (svf:kr in cutoff res lowpass bandpass highpass mul 0.0))
+  ([in cutoff res lowpass bandpass highpass mul add]
+   (op/madd (ugen/multinew (fn [cls in cutoff res lowpass bandpass highpass] (ugen/ugen-new "SVF" :control cls ugen/check-same-rate-as-first-input :bipolar in cutoff res lowpass bandpass highpass))
+                           'pure-ugen in cutoff res lowpass bandpass highpass)
+            mul add)))
