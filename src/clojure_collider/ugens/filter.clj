@@ -921,7 +921,8 @@
 
 (defn svf:ar
   "State Variable Filter (not in upstream Filter.lisp; SC semantics:
-   SVF.ar(in, cutoff, res, lowpass, bandpass, highpass, mul, add))."
+   SVF.ar(in, cutoff, res, lowpass, bandpass, highpass, mul, add)).
+   Requires the SC3plugins SVF server plugin."
   ([] (svf:ar 0.0 1000.0 0.7 0.0 0.0 0.0 1.0 0.0))
   ([in] (svf:ar in 1000.0 0.7 0.0 0.0 0.0 1.0 0.0))
   ([in cutoff] (svf:ar in cutoff 0.7 0.0 0.0 0.0 1.0 0.0))
@@ -937,7 +938,8 @@
 
 (defn svf:kr
   "State Variable Filter (not in upstream Filter.lisp; SC semantics:
-   SVF.kr(in, cutoff, res, lowpass, bandpass, highpass, mul, add))."
+   SVF.kr(in, cutoff, res, lowpass, bandpass, highpass, mul, add)).
+   Requires the SC3plugins SVF server plugin."
   ([] (svf:kr 0.0 1000.0 0.7 0.0 0.0 0.0 1.0 0.0))
   ([in] (svf:kr in 1000.0 0.7 0.0 0.0 0.0 1.0 0.0))
   ([in cutoff] (svf:kr in cutoff 0.7 0.0 0.0 0.0 1.0 0.0))

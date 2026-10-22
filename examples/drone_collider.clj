@@ -12,8 +12,9 @@
 ;;   offset/damp/fundamental stay live. Same values at defaults.
 ;; - The SC `kDynamic` knob is dead upstream (defined, never referenced);
 ;;   kept as a (currently unused) control for documentation.
-;; - SVF is new to the library for this example (not in upstream
-;;   Filter.lisp); `svf:ar` follows house style, `bpf`-adjacent.
+;; - SVF is SC3plugins-only server-side, so the example uses core BPF
+;;   (rq = 1 - res, clamped): same bandpass role, narrower as resonance
+;;   rises. The library still ships `svf:ar` for plugin users.
 ;; - Each voice seeds itself (RandID/RandSeed on `voiceid`), so the
 ;;   instrument is deterministic per boot without a global seed.
 (ns drone-collider
@@ -61,13 +62,18 @@
                                  :gate geiger0)
           sout2 (ops/* geiger* geiger*)
           ;; Module 3: random walk + enveloped bandpass.
+          ;; Core-UGen build: SVF needs the SC3plugins server plugin,
+          ;; so this uses BPF (2nd-order bandpass). rq tracks the SVF
+          ;; resonance inversely (narrower as res -> 1), clamped at 0.01
+          ;; (Q 100). With SC3plugins installed, swap back to:
+          ;; (ug/svf:ar (ug/white-noise:ar) filterP filterRes 0 1 0).
           slowRandom (ug/t-rand:kr (ops/neg amt) amt
                                    (ug/dust:kr speed))
           filterP (p-to-f (ops/+ sout1 (ops/* sout2 pitch)
                                  slowRandom))
           filterRes (ops/expt res 0.03125)
-          sout3 (ug/svf:ar (ug/white-noise:ar) filterP filterRes
-                           0 1 0)
+          sout3 (ug/bpf:ar (ug/white-noise:ar) filterP
+                           (ops/max 0.01 (ops/- 1 filterRes)))
           ;; Module 4: harmonic level share (1/(i+offset)^damp
           ;; normalized over all voices) times gain^3.
           vconst (apply ops/+ (map (fn [i]
