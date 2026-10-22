@@ -2,7 +2,8 @@
 ;; instrument (minouminou/DroneCollider): 24 parallel voices spread
 ;; across the spectrum - noise into an enveloped bandpass, panned.
 ;; Run: clojure -M -m drone-collider [seconds=0]
-;;   (boots its own scsynth; seconds 0 = play until Ctrl-C)
+;;   (boots its own scsynth; seconds 0 = knob-twiddling REPL below.
+;;   Type `<knob> <value>` (e.g. `res 0.5`), `list`, blank line quits.)
 ;;
 ;; Translation notes (SuperCollider -> here):
 ;; - Knob defaults are the "Polar Wind" preset; all knobs are synth
@@ -18,7 +19,8 @@
 ;; - Each voice seeds itself (RandID/RandSeed on `voiceid`), so the
 ;;   instrument is deterministic per boot without a global seed.
 (ns drone-collider
-  (:require [clojure-collider.server.server :as server]
+  (:require [clojure.string :as str]
+            [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [ugens :as ug]
@@ -94,20 +96,48 @@
           stereo (ug/pan2:ar sout panLFO)]
       (ug/out:ar out stereo))))
 
+(def knob-defaults
+  "Polar Wind preset, mirroring the SC source."
+  {:attack 80 :res 0.85 :density -72 :pan -96 :damp 1.35 :decay 80
+   :fundamental 36 :offset 0 :pitch 0 :speed 2.5 :amt 0.12 :rnd 24
+   :rnd2 -72 :dynamic 0.5 :gain 0.98})
+
+(defn- control-loop
+  "Read `knob value` lines from stdin until blank/quit/EOF; each sets
+  the control on all voices. `list` prints current values."
+  [nodes levels]
+  (println :knobs (sort (keys knob-defaults)))
+  (println "type `<knob> <value>` (blank line quits)")
+  (loop []
+    (print "dc> ") (flush)
+    (let [line (read-line)]
+      (when (and line (not (contains? #{"quit" "exit" ""} line)))
+        (let [[k v] (str/split line #"\s+")]
+          (cond (= k "list") (println @levels)
+                (and k v (contains? knob-defaults (keyword k)))
+                (let [x (Double/parseDouble v)]
+                  (swap! levels assoc (keyword k) x)
+                  (doseq [n nodes] (server/ctrl n (keyword k) x)))
+                :else (println :huh line)))
+        (recur)))))
+
 (defn -main [& [secs-arg]]
   (let [secs (if secs-arg (Long/parseLong secs-arg) 0)
         s (p/setup-performance! :port 57140 :tempo bpm :name "example")]
     (binding [server/*s* s]
       (define-voice!)
-      (doseq [voiceid (range 1 (inc voicesnum))]
-        (sdef/synth :drone-collider :voiceid voiceid))
-      (if (pos? secs)
-        (do (Thread/sleep (* secs 1000))
-            (server/server-quit server/*s*))
-        (do (println :playing-forever-ctrl-c-to-stop)
+      (let [nodes (mapv #(sdef/synth :drone-collider :voiceid %)
+                        (range 1 (inc voicesnum)))
+            levels (atom knob-defaults)]
+        (if (pos? secs)
+          (do (Thread/sleep (* secs 1000))
+              (server/server-quit server/*s*))
+          (let [quit! (let [done (atom false)]
+                        (fn [] (when (compare-and-set! done false true)
+                               (server/server-quit s))))]
+            (println :interactive-type-quit-to-stop)
             (.addShutdownHook (Runtime/getRuntime)
-              (Thread. ^Runnable
-                (fn [] (server/server-quit server/*s*))))
-            (while true
-              (Thread/sleep 60000)))))
+              (Thread. ^Runnable quit!))
+            (control-loop nodes levels)
+            (quit!)))))
     (println :done)))
