@@ -7,6 +7,11 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
 ## Decided
+### 2026-10-23 — node-free prefers the node's own server + basic-waveforms example
+- `node-free` resolved its server from `*s*`, which is unbound on threads like the Swing EDT: freeing a node from a Seesaw callback NPE'd inside `send-message` (nil server). Now `(or server (:server node) *s*)` — explicit arg still wins; plain ids/keywords fall through to `*s*` as before.
+- `examples/basic_waveforms.clj`: Seesaw port of sculpt's Basic Waveforms Interface (macOS). Same synth (Select over off/sine/saw/pulse/tri under a retriggerable gate env), exp-mapped freq/amp/width sliders with text fields, waveform picker, LOAD/ON toggles, client-side preview canvas replacing the 12 plot buttons + scope + freqscope. Seesaw dep added to `deps.edn`.
+- Status: decided
+
 ### 2026-10-20 — clip/fold/wrap rate-dispatch methods (upstream defmethods)
 - Upstream `clip`/`fold`/`wrap` dispatch on combined input rate (`:scalar` folds to numbers via `:ir` op graphs, else the unit at `:audio`/`:control`). Ported to `trig.clj`; facades re-export; drone voice uses `clip` (was forced `clip:ar`/`clip:kr`).
 - Why now, not just parity: an audio-rate `Clip` whose inputs are all scalars/consts segfaults scsynth 3.13 (NRT + silent live node) when a `Control` unit is present. Bytes are structurally valid; sibling `Fold` is immune. Forcing `:ar` (as the voice did for control proxies) emits exactly that shape. Dispatch never does: scalars fold, controls go `:kr` (verified renders).

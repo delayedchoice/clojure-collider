@@ -589,7 +589,9 @@
           (message-distribute node [command target-id id] target-server))))))
 
 (defn node-free [node & [server]]
-  (let [server (or server *s*)]
+  ;; Prefer the node's own server: *s* is unbound on threads like the Swing
+  ;; EDT, which previously NPE'd inside send-message (nil server).
+  (let [server (or server (:server node) *s*)]
     (with-node [id _] node
       (message-distribute node ["/n_free" id] server))))
 
