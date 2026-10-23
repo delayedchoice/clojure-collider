@@ -88,7 +88,12 @@
                   (s/listen field :action (fn [_] (from-field!)))
                   {:key key :slider slider :field field
                    :row [(s/label :text label :foreground light :background dark)
-                         slider field]}))
+                         (s/label :text (format fmt (double lo))
+                                  :foreground light :background dark)
+                         slider
+                         (s/label :text (format fmt (double hi))
+                                  :foreground light :background dark)
+                         field]}))
               specs)
         play-btn (s/toggle :text "PLAY")
         status (s/label :text "stopped" :foreground light :background dark)]
@@ -105,7 +110,7 @@
                     (do (free!)
                         (s/config! status :text "stopped"))))))
     (let [exit-btn (s/button :text "EXIT")
-          panel (s/grid-panel :rows (count rows) :columns 3 :background dark
+          panel (s/grid-panel :rows (count rows) :columns 5 :background dark
                               :items (mapcat :row rows))
           scroll (s/scrollable panel :background dark)
           frame (s/frame :title title

@@ -5,14 +5,18 @@
   (:require [clojure-collider.server.server :as server]
             [drone-collider :as dc]
             [synth-gui :as g]))
-
 (def ranges
   {:attack {:lo 1.0 :hi 320.0 :exp? true}
    :decay {:lo 1.0 :hi 320.0 :exp? true}
    :fundamental {:lo 8.0 :hi 128.0 :exp? true}
    :speed {:lo 0.1 :hi 10.0 :exp? true}
    :offset {:lo -24.0 :hi 24.0}
-   :pitch {:lo -4.0 :hi 4.0}})
+   :pitch {:lo -4.0 :hi 4.0}
+   :res {:hi 1.0} ; rq clamps above ~0.85: higher is identical
+   :pan {:lo -144.0 :hi 12.0} ; LFO rate in disguise; lower is frozen
+   :amt {:lo 0.0 :hi 2.0} ; semitone wander: shimmer -> seasick
+   :rnd2 {:lo -120.0 :hi 0.0}
+   :gain {:hi 1.0}}) ; cubed downstream, no limiter: hotter just clips
 
 (defn -main [& _]
   (let [s (server/make-external-server "drone-gui" :port 57145)]
