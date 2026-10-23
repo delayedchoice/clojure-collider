@@ -34,7 +34,13 @@
         (server/node-free drone))
       ;; Percussive FM voice: carrier + one modulator, perc envelope frees the
       ;; synth (like upstream :act :free), panned stereo out.
-      (sdef/defsynth :fm [car-hz 500 mod-hz 100 mod-amp 200 atk 0.01 rel 1 amp 0.2 pan 0]
+      (sdef/defsynth :fm [car-hz 500
+                            mod-hz 100
+                            mod-amp 200
+                            atk 0.01
+                            rel 1
+                            amp 0.2
+                            pan 0]
         (ug/out:ar 0 (ug/pan2:ar (ops/* (ug/env-gen:kr (ug/env-perc atk rel) :act :free)
                                         (ug/sin-osc:ar (ops/+ car-hz
                                                                (ug/sin-osc:ar mod-hz 0 mod-amp)))

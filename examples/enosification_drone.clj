@@ -124,10 +124,22 @@
   engine when a server is listening."
   []
 (sdef/defsynth :drone-synth
-  [freq 440 atk 0.005 rel 0.3 amp 1 pan 0 gain 1
-   mod-index 2 phase-mod-index 2 lpf-freq 18000
-   resonance 0 hold 6.0 freq-deviation 0.975
-   transition-time 0.875 rq 0.1 random-seed 4 out 0]
+  [freq 440
+   atk 0.005
+   rel 0.3
+   amp 1
+   pan 0
+   gain 1
+   mod-index 2
+   phase-mod-index 2
+   lpf-freq 18000
+   resonance 0
+   hold 6.0
+   freq-deviation 0.975
+   transition-time 0.875
+   rq 0.1
+   random-seed 4
+   out 0]
   (let [frq (ug/clip:kr freq 20 20000)
         _ (ug/rand-seed:ar random-seed)
         ;; upstream: (* (sin-osc (/ frq 2)) #_(...)) — second factor
@@ -148,7 +160,8 @@
     (ug/out:ar out (ug/limiter:ar sig 0.1))))
   ;; Master stage: per-voice limiters cap individuals, but 47-voice clouds
   ;; still sum hot. Fixed 0.7 trim + Compander backstop, same as eno-ending.
-  (sdef/defsynth :mix-limiter [bus 16 amp 1.0]
+  (sdef/defsynth :mix-limiter [bus 16
+                                 amp 1.0]
     (let [sig (ug/in:ar bus 2)
           sig (ops/* sig 0.5 amp)]
       (ug/out:ar 0 (ug/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))

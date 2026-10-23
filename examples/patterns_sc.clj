@@ -13,13 +13,16 @@
     (server/server-boot s)
     (binding [server/*s* s]
       ;; Pitch-swept kick: the sweep tracks :freq via :level-scale.
-      (sdef/defsynth :kik [freq 440 out 0]
+      (sdef/defsynth :kik [freq 440
+                             out 0]
         (let [env (ug/env-gen:kr (ug/env [0 1 0] [0.001 1]) :act :free)
               fenv (ug/env-gen:kr (ug/env [1 0] [0.25]) :level-scale freq)
               sig (ug/sin-osc:ar fenv 0 0.2)]
           (ug/out:ar out (ug/pan2:ar sig 0 env))))
       ;; Gated voice for the melody (backend releases :gate per sustain).
-      (sdef/defsynth :default [gate 1 freq 440 out 0]
+      (sdef/defsynth :default [gate 1
+                                 freq 440
+                                 out 0]
         (let [env (ug/env-gen:kr (ug/env-asr 0.01 1 0.1) :gate gate :act :free)
               sig (ug/sin-osc:ar freq 0 0.2)]
           (ug/out:ar out (ug/pan2:ar sig 0 env))))

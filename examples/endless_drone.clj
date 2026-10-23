@@ -33,7 +33,15 @@
   self-freeing - see header."
   []
   (sdef/defsynth :endless
-    [f0 440 f1 440 f2 440 f3 440 f4 440 f5 440 f6 440 f7 440 f8 440
+    [f0 440
+     f1 440
+     f2 440
+     f3 440
+     f4 440
+     f5 440
+     f6 440
+     f7 440
+     f8 440
      out 0]
     (let [res (ug/klank:ar [[f0 f1 f2 f3 f4 f5 f6 f7 f8]
                             [1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0]

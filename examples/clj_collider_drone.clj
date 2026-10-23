@@ -34,13 +34,25 @@
   Must run after boot / inside with-rendering."
   []
   (sdef/defsynth :als
-    [freq 440 atk 0.005 rel 0.3 amp 1 pan 0 gain 1
-     mod-index 2 phase-mod-index 2 lpf-freq 18000
-     resonance 0 hold 6.0 freq-deviation 0.975
-     transition-time 0.875 resonz-q 0.1 out 0
+    [freq 440
+     atk 0.005
+     rel 0.3
+     amp 1
+     pan 0
+     gain 1
+     mod-index 2
+     phase-mod-index 2
+     lpf-freq 18000
+     resonance 0
+     hold 6.0
+     freq-deviation 0.975
+     transition-time 0.875
+     resonz-q 0.1
+     out 0
      ;; Bounce determinism: constant trig fires once at voice start and
      ;; fixes server noise. Live defaults (trig 0) never fire: inert.
-     rseed-trig 0 rseed 1234]
+     rseed-trig 0
+     rseed 1234]
     (ug/rand-seed:ar rseed-trig rseed)
     (let [frq (ug/clip freq 20 20000)
           ;; FM depth ramps 0 -> mod-index over transition-time, scaled by freq.
@@ -75,7 +87,8 @@
           sig (ug/leak-dc:ar sig)
           sig (ug/hpf:ar sig 32)]
       (ug/out:ar out (ug/limiter:ar sig 0.1))))
-  (sdef/defsynth :mix-limiter [bus 16 amp 1.0]
+  (sdef/defsynth :mix-limiter [bus 16
+                                 amp 1.0]
     (let [sig (ug/in:ar bus 2)
           sig (ops/* sig 0.5 amp)]
       (ug/out:ar 0 (ug/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))

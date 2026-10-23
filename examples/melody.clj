@@ -14,7 +14,8 @@
     (server/server-boot s)
     (binding [server/*s* s]
       (sdef/defsynth :saw-synth
-        [note 60 dur 4.0]
+        [note 60
+         dur 4.0]
         (let [env (ug/env-gen:kr (ug/env [0 0.2 0] [(ops/* dur 0.2) (ops/* dur 0.8)]) :act :free)
               freq (ops/midicps note)
               sig (ug/lpf:ar (ug/saw:ar freq env) (ops/* freq 2))]

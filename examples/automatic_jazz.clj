@@ -14,7 +14,10 @@
   (let [s (server/make-external-server "example" :port 57137)]
     (server/server-boot s)
     (binding [server/*s* s]
-      (sdef/defsynth :jazz [gate 1 freq 440 amp 0.3 out 0]
+      (sdef/defsynth :jazz [gate 1
+                              freq 440
+                              amp 0.3
+                              out 0]
         (let [env (ug/env-gen:kr (ug/env-asr 0.01 1 0.1) :gate gate :act :free)
               sig (ug/sin-osc:ar freq 0 amp)]
           (ug/out:ar out (ug/pan2:ar sig 0 env))))

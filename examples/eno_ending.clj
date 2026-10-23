@@ -107,7 +107,9 @@
             ;; 0.06 — dim upper partials, no bell); one FreeVerb per channel
             ;; (35% wet, large bright room); out to the voice's `out` bus.
             ;; Params: note (MIDI), amp (this note's loudness), out (bus).
-            (sdef/defsynth :felt-piano [note 60 amp 0.5 out 0]
+            (sdef/defsynth :felt-piano [note 60
+                                          amp 0.5
+                                          out 0]
               (let [fr (ops/midicps note)
                     env (ug/env-gen:kr (ug/env [0 1 0] [0.4 18.0]) :act :free)
                     sig (ops/+ (ug/sin-osc:ar fr 0 amp)

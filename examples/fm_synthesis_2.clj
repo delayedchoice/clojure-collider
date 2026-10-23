@@ -27,8 +27,17 @@
     (binding [server/*s* s]
       ;; Index-swept FM: the mod depth itself follows an envelope
       ;; (index -> index*i-scale -> index) over atk/rel.
-      (sdef/defsynth :fm [freq 500 m-ratio 1 c-ratio 1 index 1 i-scale 5
-                          amp 0.2 atk 0.01 rel 3 c-atk 4 c-rel -4 pan 0]
+      (sdef/defsynth :fm [freq 500
+                            m-ratio 1
+                            c-ratio 1
+                            index 1
+                            i-scale 5
+                            amp 0.2
+                            atk 0.01
+                            rel 3
+                            c-atk 4
+                            c-rel -4
+                            pan 0]
         (let [ienv (ug/env-gen:kr (ug/env [index (ops/* index i-scale) index]
                                           [atk rel] [c-atk c-rel]))
               env (ug/env-gen:kr (ug/env-perc atk rel 1 [c-atk c-rel]) :act :free)
@@ -45,8 +54,17 @@
         (Thread/sleep 6000)
         (doseq [n [n1 n2 n3]] (server/node-free n)))
       ;; Two-operator FM with a sub-audio second modulator.
-      (sdef/defsynth :fm2 [freq 500 m-ratio 1 c-ratio 1 index 1 i-scale 5
-                           amp 0.2 atk 0.01 rel 3 c-atk 4 c-rel -4 pan 0]
+      (sdef/defsynth :fm2 [freq 500
+                             m-ratio 1
+                             c-ratio 1
+                             index 1
+                             i-scale 5
+                             amp 0.2
+                             atk 0.01
+                             rel 3
+                             c-atk 4
+                             c-rel -4
+                             pan 0]
         (let [ienv (ug/env-gen:kr (ug/env [index (ops/* index i-scale) index]
                                           [atk rel] [c-atk c-rel]))
               env (ug/env-gen:kr (ug/env-perc atk rel 1 [c-atk c-rel]) :act :free)

@@ -37,7 +37,11 @@
    under a retriggerable attack-sustain gate envelope, out stereo."
   []
   (sdef/defsynth :basicwaveforms
-    [freq 65.41 amp 0.1 width 0.5 which 0 t-trig 0]
+    [freq 65.41
+     amp 0.1
+     width 0.5
+     which 0
+     t-trig 0]
     (let [env (ug/env-gen:kr (ug/env [0 1 0] [0.01 600] :lin) :gate t-trig)
           voice (ug/select:ar which [(ug/dc:ar 0)
                                     (ug/sin-osc:ar freq 0 amp)

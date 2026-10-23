@@ -7,6 +7,11 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
 ## Decided
+### 2026-10-23 — generic synthdef GUI + defsynth vector style
+- All example `defsynth` vectors reflowed: first param shares the `[` line, one param per line after, last param shares the `]` line (single-param vectors unchanged).
+- `examples/synth_gui.clj`: generic Seesaw panel for any synthdef — specs derived from `sdef/synthdef-metadata` (`:controls` pairs), range inference (positive d -> [0,2d], negative -> [2d,0], zero -> [-1,1], linear unless `:exp?` with lo > 0), per-key RANGES overrides, SKIP set (default #{:out}), PLAY/STOP lifecycle with fixed EXTRA-ARGS. `examples/drone_gui.clj` is the test seat: 15 sliders for `:drone-collider` (skips out/voiceid, exp attack/decay/fundamental/speed), verified live under xvfb.
+- Status: decided
+
 ### 2026-10-23 — node-free prefers the node's own server + basic-waveforms example
 - `node-free` resolved its server from `*s*`, which is unbound on threads like the Swing EDT: freeing a node from a Seesaw callback NPE'd inside `send-message` (nil server). Now `(or server (:server node) *s*)` — explicit arg still wins; plain ids/keywords fall through to `*s*` as before.
 - `examples/basic_waveforms.clj`: Seesaw port of sculpt's Basic Waveforms Interface (macOS). Same synth (Select over off/sine/saw/pulse/tri under a retriggerable gate env), exp-mapped freq/amp/width sliders with text fields, waveform picker, LOAD/ON toggles, client-side preview canvas replacing the 12 plot buttons + scope + freqscope. Seesaw dep added to `deps.edn`.

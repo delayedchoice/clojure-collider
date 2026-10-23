@@ -39,10 +39,23 @@
   "One :drone-collider def. Module numbering follows the SC source."
   []
   (sdef/defsynth :drone-collider
-    [out 0 voiceid 1
-     attack 80 res 0.85 density -72 pan -96 damp 1.35 decay 80
-     fundamental 36 offset 0 pitch 0 speed 2.5 amt 0.12 rnd 24
-     rnd2 -72 dynamic 0.5 gain 0.98]
+    [out 0
+     voiceid 1
+     attack 80
+     res 0.85
+     density -72
+     pan -96
+     damp 1.35
+     decay 80
+     fundamental 36
+     offset 0
+     pitch 0
+     speed 2.5
+     amt 0.12
+     rnd 24
+     rnd2 -72
+     dynamic 0.5
+     gain 0.98]
     (ug/rand-id:ir voiceid)
     (ug/rand-seed:ir 1 voiceid)
     ;; Module 1: this voice's center pitch.
