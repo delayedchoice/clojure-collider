@@ -104,19 +104,23 @@
                         (s/config! status :text "playing"))
                     (do (free!)
                         (s/config! status :text "stopped"))))))
-    (let [panel (s/grid-panel :rows (count rows) :columns 3 :background dark
+    (let [exit-btn (s/button :text "EXIT")
+          panel (s/grid-panel :rows (count rows) :columns 3 :background dark
                               :items (mapcat :row rows))
           scroll (s/scrollable panel :background dark)
           frame (s/frame :title title
                          :content (s/border-panel :background light
                                     :north (s/horizontal-panel :background dark
-                                             :items [play-btn status])
+                                             :items [play-btn status exit-btn])
                                     :center scroll)
                          :on-close :dispose)]
+      ;; :window-closed does the teardown (free + server-quit); EXIT just
+      ;; takes that path so the two can't diverge.
+      (s/listen exit-btn :action (fn [_] (.dispose ^java.awt.Frame frame)))
       (s/listen frame :window-closed
                 (fn [_] (free!) (when (server/boot? s) (server/server-quit s))))
       (s/invoke-later (-> frame (s/config! :size [420 :by 600]) s/show!))
       {:frame frame :node node :levels levels
        :sliders (into {} (map (juxt :key :slider)) rows)
        :fields (into {} (map (juxt :key :field)) rows)
-       :play-btn play-btn})))
+       :play-btn play-btn :exit-btn exit-btn})))
