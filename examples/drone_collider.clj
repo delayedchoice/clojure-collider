@@ -29,10 +29,10 @@
 (def voicesnum 24)
 (def bpm 120)
 
-(defn- p-to-f [pitch]
+(defn- midi-to-freq [pitch]
   (ops/expt 2 (ops/+ (ops// pitch 12) 3.03135)))
 
-(defn- f-to-p [freq]
+(defn- freq-to-midi [freq]
   (ops/* 12 (ops/- (ops/log2 freq) 3.03135)))
 
 (defn define-voice!
@@ -46,11 +46,11 @@
     (ug/rand-id:ir voiceid)
     (ug/rand-seed:ir 1 voiceid)
     ;; Module 1: this voice's center pitch.
-    (let [sout1 (f-to-p (ops/* (ops/+ voiceid offset)
-                               (p-to-f fundamental)))
+    (let [sout1 (freq-to-midi (ops/* (ops/+ voiceid offset)
+                               (midi-to-freq fundamental)))
           ;; Module 2: geiger retrigger (LocalIn feedback + LFPulse
           ;; into an ADSR squared).
-          cntFreq (p-to-f (ops/+ (ug/local-in:ar 1)
+          cntFreq (midi-to-freq (ops/+ (ug/local-in:ar 1)
                                  (ug/i-rand:ir (ops/neg rnd) rnd)
                                  density))
           geiger0 (ug/lf-pulse:ar cntFreq 0 0.5)
@@ -71,7 +71,7 @@
           ;; (ug/svf:ar (ug/white-noise:ar) filterP filterRes 0 1 0).
           slowRandom (ug/t-rand:kr (ops/neg amt) amt
                                    (ug/dust:kr speed))
-          filterP (p-to-f (ops/+ sout1 (ops/* sout2 pitch)
+          filterP (midi-to-freq (ops/+ sout1 (ops/* sout2 pitch)
                                  slowRandom))
           filterRes (ops/expt res 0.03125)
           sout3 (ug/bpf:ar (ug/white-noise:ar) filterP
@@ -89,10 +89,10 @@
           ;; Module 5: voice signal.
           sout (ops/* sout3 sout2 sout4)
           ;; Module 6: wandering stereo placement.
-          slowRandom2 (ug/t-rand:kr (ops/neg (p-to-f rnd2))
-                                    (p-to-f rnd2)
-                                    (ug/dust:kr (p-to-f rnd2)))
-          panLFO (ug/lf-tri:ar (ops/+ (p-to-f pan) slowRandom2))
+          slowRandom2 (ug/t-rand:kr (ops/neg (midi-to-freq rnd2))
+                                    (midi-to-freq rnd2)
+                                    (ug/dust:kr (midi-to-freq rnd2)))
+          panLFO (ug/lf-tri:ar (ops/+ (midi-to-freq pan) slowRandom2))
           stereo (ug/pan2:ar sout panLFO)]
       (ug/out:ar out stereo))))
 
