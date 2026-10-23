@@ -47,7 +47,10 @@
           stereo (ops/* env voice)]
       (ug/out:ar 0 [stereo stereo]))))
 
-;; Client-side schematic of the selected wave (2 cycles, width/amp applied).
+;; Client-side schematic of the selected wave (width applied). Fixed 25 ms
+;; timebase, so frequency reads as density; display gain has a floor so quiet
+;; amp settings stay visible (true amp is in the text field).
+(def ^:private preview-window 0.025)
 (defn- wave-sample [which width phase]
   (let [ph (mod phase 1)]
     (case which
@@ -59,14 +62,16 @@
 
 (defn- paint-preview [levels c g]
   (let [w (.getWidth c) h (.getHeight c)
-        {:keys [amp width which]} @levels
-        mid (/ h 2) y-scale (* (- mid 6) amp)]
+        {:keys [freq amp width which]} @levels
+        mid (/ h 2)
+        y-scale (* (- mid 6) (min 1.0 (max 0.35 (* 2.5 amp))))]
     (doto g
       (.setColor dark) (.fillRect 0 0 w h)
       (.setColor light) (.drawLine 0 mid w mid))
     (let [prev (atom nil)]
       (doseq [x (range w)]
-        (let [y (- mid (* y-scale (wave-sample which width (* 2 (/ x (max 1 w))))))]
+        (let [t (* preview-window (/ x (max 1 w)))
+              y (- mid (* y-scale (wave-sample which width (* freq t))))]
           (when @prev (.drawLine g (dec x) (int @prev) x (int y)))
           (reset! prev y))))))
 
@@ -163,7 +168,7 @@
       (s/listen frame :window-closed
                 (fn [_] (free!) (when (server/boot? s) (server/server-quit s))))
       (s/invoke-later (-> frame s/pack! s/show!))
-      {:frame frame :node node :levels levels
+      {:frame frame :node node :levels levels :canvas canvas
        :sliders (into {} (map (juxt :key :slider)) rows)
        :fields (into {} (map (juxt :key :field)) rows)
        :picker picker :load-btn load-btn :on-btn on-btn})))
