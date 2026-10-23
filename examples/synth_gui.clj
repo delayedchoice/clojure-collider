@@ -123,7 +123,17 @@
       ;; takes that path so the two can't diverge.
       (s/listen exit-btn :action (fn [_] (.dispose ^java.awt.Frame frame)))
       (s/listen frame :window-closed
-                (fn [_] (free!) (when (server/boot? s) (server/server-quit s))))
+                (fn [_]
+                  ;; Either step failing must not skip the other: an orphaned
+                  ;; scsynth keeps sounding with no window to stop it.
+                  (try (free!)
+                       (catch Exception e
+                         (binding [*out* *err*]
+                           (println :teardown-free-failed (ex-message e)))))
+                  (try (when (server/boot? s) (server/server-quit s))
+                       (catch Exception e
+                         (binding [*out* *err*]
+                           (println :teardown-quit-failed (ex-message e)))))))
       (s/invoke-later (-> frame (s/config! :size [420 :by 600]) s/show!))
       {:frame frame :node node :levels levels
        :sliders (into {} (map (juxt :key :slider)) rows)
