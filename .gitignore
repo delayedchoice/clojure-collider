@@ -3,3 +3,4 @@
 .clj-kondo/.cache/
 *.class
 *.jar
+.nrepl-port
