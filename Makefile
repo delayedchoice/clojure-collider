@@ -1,5 +1,7 @@
-.PHONY: test kondo build clean check
-test:
+.PHONY: test kondo build clean check docs
+docs:
+	clojure -X:codox
+ test:
 	clojure -M:test
 kondo:
 	clojure -M:kondo --lint src test

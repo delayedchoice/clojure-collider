@@ -1,13 +1,13 @@
-;; Short facade: every pattern primitive behind one require.
-;; Run: (:require [pattern :as p]) then p/pbind, p/pwhite, p/play, etc.
-;;
-;; Later namespaces win on the three shared names (all benign):
-;; scales/degree-midinote over conversions (concrete tables),
-;; util/eop + eop? over the delegating copies.
-;; Dynamic vars (*rng* *event* *clock* *scale-lookup*) are NOT copied:
-;; a copy would not propagate binding. `seed-rng!` covers seeding;
-;; bind the home vars directly for custom instances.
-(ns pattern)
+ (ns pattern
+   "Short facade: every pattern primitive behind one require.
+   Run: (:require [pattern :as p]) then p/pbind, p/pwhite, p/play, etc.
+   Later namespaces win on the three shared names (all benign):
+   scales/degree-midinote over conversions (concrete tables),
+   util/eop + eop? over the delegating copies.
+   Dynamic vars (*rng* *event* *clock* *scale-lookup*) are NOT copied:
+   a copy would not propagate binding. `seed-rng!` covers seeding;
+   bind the home vars directly for custom instances.
+   The var list lives on the patterns.* pages.")
 
 (require 'patterns.util 'patterns.conversions 'patterns.scales 'patterns.event
          'patterns.patterns 'patterns.pbind 'patterns.backend 'patterns.clock)

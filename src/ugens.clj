@@ -1,8 +1,9 @@
-;; Short facade: every public UGen fn behind one require.
-;; Run: (:require [ugens :as u]) then u/sin-osc:ar etc.
-;; Implemented by copying the publics of clojure-collider.ugens (which
-;; already de-duplicates the per-file namespaces) at load.
-(ns ugens)
+ (ns ugens
+   "Short facade: every public UGen fn behind one require.
+   Run: (:require [ugens :as u]) then u/sin-osc:ar etc.
+   Implemented by copying the publics of clojure-collider.ugens (which
+   already de-duplicates the per-file namespaces) at load, so the var
+   list lives on clojure-collider.ugens / the per-family pages.")
 
 (require 'clojure-collider.ugens)
 
