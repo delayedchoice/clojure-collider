@@ -12,8 +12,7 @@
 
 (defn -main [& _]
   (let [s (server/make-external-server "example" :port 57137)]
-    (server/server-boot s)
-    (binding [server/*s* s]
+     (binding [server/*s* (p/connect-server! s :tempo 90)]
       (sdef/defsynth :jazz [gate 1
                               freq 440
                               amp 0.3
@@ -21,8 +20,6 @@
         (let [env (ug/env-gen:kr (ug/env-asr 0.01 1 0.1) :gate gate :act :free)
               sig (ug/sin-osc:ar freq 0 amp)]
           (ug/out:ar out (ug/pan2:ar sig 0 env))))
-      (p/start-clock-loop :tempo 90)
-      (p/enable-backend! (p/make-cl-collider-backend s))
       (p/pb :automatic-jazz
         :instrument :jazz
         :note (p/pshuf (p/scale-notes :minor) 4)

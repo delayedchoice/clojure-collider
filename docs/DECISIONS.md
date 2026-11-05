@@ -6,7 +6,10 @@ Record every non-trivial choice here. Newest on top.
 
 _(none — all initial decisions locked 2026-10-02)_
 
-## Decided
+ ## Decided
+ ### 2026-11-05 — `connect-server!` boot/clock/backend one-call
+ - `patterns.clock/connect-server!` takes an existing server S: boots it, starts the clock at TEMPO (default 90), enables a `ClColliderBackend` on S, returns S for the binding form — `(binding [server/*s* (p/connect-server! s :tempo 90)] ...)`. Exported via the `pattern` facade. Takes S explicitly because the binding init-expr runs before `*s*` is bound. Explicit enable also suppresses `play`'s auto-backend (fires only with zero backends), so exactly one backend sounds. `examples/automatic_jazz.clj` is the first adopter (was 3 calls).
+ - Status: decided
 ### 2026-10-23 — generic synthdef GUI + defsynth vector style
 - All example `defsynth` vectors reflowed: first param shares the `[` line, one param per line after, last param shares the `]` line (single-param vectors unchanged).
 - `examples/synth_gui.clj`: generic Seesaw panel for any synthdef — specs derived from `sdef/synthdef-metadata` (`:controls` pairs), range inference (positive d -> [0,2d], negative -> [2d,0], zero -> [-1,1], linear unless `:exp?` with lo > 0), per-key RANGES overrides, SKIP set (default #{:out}), PLAY/STOP lifecycle with fixed EXTRA-ARGS. `examples/drone_gui.clj` is the test seat: 15 sliders for `:drone-collider` (skips out/voiceid, exp attack/decay/fundamental/speed), verified live under xvfb.

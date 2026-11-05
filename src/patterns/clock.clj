@@ -74,9 +74,24 @@
                           (opts/make-server-options
                            {:realtime-mem-size 65536
                             :max-num-nodes 4096})))]
-    (server/server-boot s)
-    (start-clock-loop :tempo tempo)
-    s))
+     (server/server-boot s)
+     (start-clock-loop :tempo tempo)
+     s))
+ 
+ (defn connect-server!
+   "One call for the standard live boilerplate: boot external server S,
+   start the pattern clock at TEMPO bpm, enable a ClColliderBackend on S.
+   Returns S - call it from the binding form:
+   (binding [server/*s* (connect-server! s :tempo 90)] ...).
+   Takes S explicitly (not server/*s*) because the binding init-expr runs
+   before *s* is bound. Enabling up front also suppresses play's
+   auto-backend (it only fires with no backends enabled), so exactly one
+   backend sounds."
+   [s & {:keys [tempo] :or {tempo 90}}]
+   (server/server-boot s)
+   (start-clock-loop :tempo tempo)
+   (enable-backend! (backend/make-cl-collider-backend s))
+   s)
 
 ;; -- beats / quant --------------------------------------------------------------
 
