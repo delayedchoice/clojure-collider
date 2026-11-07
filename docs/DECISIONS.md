@@ -7,6 +7,9 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-07 — bounce schedules its own gate-offs (NRT has no clock)
+ - Long `discreet_music` bounces died with `CombN_Ctor: alloc failed` from ~t=141 and rendered a too-loud wash before that: the backend releases voices via `server/callback`, which needs a running scheduler clock - dead in NRT - so voices sustained forever, leaking RT memory per voice. `bounce` now `at`s an explicit `gate 0` per gated voice in score time (same `sus/bps` math as the backend). 180s re-render: zero alloc failures, peak 0.22, steady RMS throughout. Any future NRT path must do the same - `server/callback` is live-only.
+ - Status: decided
  ### 2026-11-07 — `discreet_music bounce` + backend tempo fix
  - `discreet_music bounce SECS OUT` renders deterministically (no wall clock): pulls both loops via `play-take`, replays events at absolute 120bpm times through a backend inside `with-rendering`, loop synth with the same 10s fade-out. Pad doubles as the score cutoff, so it spans `secs + 12`. Verified: 30s bounce renders 42.0s, peak 0.31, fade-in swell then 20-30s fade to digital silence; `ffmpeg -y -i OUT -codec:a libmp3lame -qscale:a 2 OUT.mp3` (or macOS `afconvert -f MPG3 -d '.mp3'`) produces the mp3.
  - Found while building it: the pattern backend computed gate release from event `:sustain` (beats) assuming 60bpm (`:tempo` default 1, never set anywhere), so every non-60 rig released late (2x at 120, 1.5x at jazz's 90). `step-body!` now assocs the clock's beats/sec into each event. Affects all pattern playback for the better; suite green.

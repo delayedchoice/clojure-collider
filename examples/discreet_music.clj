@@ -103,9 +103,19 @@
        (define-voices!)
        (let [loop (sdef/synth :discreet-loop :inbus 16)
              be (p/make-cl-collider-backend server/*s*)]
+         ;; NOTE: the backend's own release uses server/callback, which
+         ;; needs a running (live) scheduler clock - dead in NRT. Without
+         ;; explicit gate-offs every voice sustains forever, leaking RT
+         ;; memory until CombN allocs fail (~t=141 in a long render) and
+         ;; burying the mix. So schedule each release directly in score.
          (doseq [{:keys [beat event]} evts]
-           (p/play-event be (assoc event :tempo bps)
-                         (* (double beat) (/ 1.0 bps))))
+           (let [t (* (double beat) (/ 1.0 bps))
+                 node (p/play-event be (assoc event :tempo bps) t)
+                 sus (:sustain event)]
+             (when (and (number? sus) (pos? (double sus))
+                        (p/gated-synth? (:instrument event)))
+               (server/at (+ t (/ (double sus) bps))
+                 (server/ctrl node :gate 0)))))
          (server/at (double (max 0 (- secs 10)))
            (server/ctrl loop :gate 0))
          (server/at (double secs)
