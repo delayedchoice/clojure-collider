@@ -20,10 +20,13 @@
  ;; bites: if ANY app opens the mic endpoint, the headset drops to
  ;; low-quality headset mode and our music endpoint buzzes with it.
  ;;
- ;; Which name to use for -H? The 0-in / 2-out MUSIC endpoint. Get its
- ;; exact spelling from the device list our own boot prints (look for the
- ;; entry whose Output block shows 2 channels), or from Audio MIDI Setup;
- ;; pass it explicitly, e.g. (explicit-device "Robert's Airpods Pro 2").
+ ;; SKIP -H when the baseline already shows the AirPods as Output (as it
+ ;; does here): steps 3-5 run without -H by default. -H is only for when
+ ;; macOS default output is NOT the AirPods - and beware duplicates: if
+ ;; two entries share one name (scsynth lists "Robert’s AirPods P" twice,
+ ;; entries 0 and 1), -H matches the FIRST, which is the mic endpoint
+ ;; with no outputs, and boot fails. Prefer no -H; if you must pin, first
+ ;; rename the mic entry in Audio MIDI Setup so the music name is unique.
  ;; Watch the quote character: macOS names often use a curly ’ (U+2019) -
  ;; copy it, don't retype it as ASCII ', or -H won't match.
  ;;
@@ -71,41 +74,46 @@
   (play-chord! 57170 {} 15))
 
  (defn explicit-device
-   "Step 2: pin scsynth straight at the AirPods MUSIC endpoint with -H,
-   bypassing whatever macOS has as default (often a drifting Multi-Output
-   aggregate). Use the 0-in / 2-out entry (the 1-in mic entry is the wrong
-   device - opening it drops the headset to low-quality mode).
+   "Step 2 (usually SKIP - see header): pin scsynth at the AirPods MUSIC
+   endpoint with -H. Only useful when macOS default output is NOT already
+   the AirPods. WARNING: with duplicated names -H matches the first entry,
+   the mic endpoint, and boot fails - prefer steps 3-5 without -H, or
+   rename the mic entry in Audio MIDI Setup first.
    Run: (bluetooth-headphones/explicit-device)
    Exact name: (bluetooth-headphones/explicit-device \"Robert's Airpods Pro 2\")"
    [& [device]]
    (play-chord! 57171 {:device (or device default-device)} 15))
 
-(defn big-buffer
-  "Step 3: device + a larger hardware buffer (-Z) for Bluetooth jitter.
-   Defaults to 1024; if still choppy, rerun with 2048.
+ (defn big-buffer
+   "Step 3: a larger hardware buffer (-Z) for Bluetooth jitter. No -H by
+   default: your baseline already shows the AirPods as system output, and
+   -H with a duplicated name (entries 0 and 1 are both \"...AirPods P\")
+   can grab the mic endpoint, which has no outputs. Only pass :device if
+   your default output is NOT the AirPods.
    Run: (bluetooth-headphones/big-buffer)
-   Bigger: (bluetooth-headphones/big-buffer 2048)"
-  [& [size]]
-  (play-chord! 57172 {:device default-device
-                      :hardware-buffer-size (or size 1024)} 15))
+   Bigger: (bluetooth-headphones/big-buffer :size 2048)
+   With device: (bluetooth-headphones/big-buffer :device \"Name\" :size 1024)"
+   [& {:keys [device size] :or {size 1024}}]
+   (play-chord! 57172 (cond-> {:hardware-buffer-size size}
+                        device (assoc :device device)) 15))
 
-(defn forced-rate
-   "Step 4: device + buffer + a forced hardware sample rate (-S). Use the
-   MUSIC endpoint's rate (48k on yours) - the mic endpoint's 24k is
-   irrelevant, we never open it. If 48k still buzzes, try 44100.
+ (defn forced-rate
+   "Step 4: buffer + a forced hardware sample rate (-S). No -H by default
+   (see big-buffer: duplicated AirPods names make -H grab the mic end).
+   Use the MUSIC endpoint's rate (48k on yours) - the mic endpoint's 24k
+   is irrelevant, we never open it. If 48k still buzzes, try 44100.
    Run: (bluetooth-headphones/forced-rate)
-   Other rate: (bluetooth-headphones/forced-rate 44100)"
-  [& [rate]]
-  (play-chord! 57173 {:device default-device
-                      :hardware-buffer-size 1024
-                      :hardware-samplerate (or rate 48000)} 15))
-
-(defn kitchen-sink
-  "Everything at once: device + 2048 buffer + forced rate. When the
-   earlier steps disagree, this is the most forgiving combo; narrow it
-   down afterwards by dropping keys.
+   Other rate: (bluetooth-headphones/forced-rate :rate 44100)"
+   [& {:keys [device size rate] :or {size 1024 rate 48000}}]
+   (play-chord! 57173 (cond-> {:hardware-buffer-size size
+                               :hardware-samplerate rate}
+                        device (assoc :device device)) 15))
+ 
+ (defn kitchen-sink
+   "Everything at once: big buffer + forced rate (+ -H only if passed).
+   The most forgiving combo; narrow it down afterwards by dropping keys.
    Run: (bluetooth-headphones/kitchen-sink)"
-  []
-  (play-chord! 57174 {:device default-device
-                      :hardware-buffer-size 2048
-                      :hardware-samplerate 48000} 15))
+   [& {:keys [device size rate] :or {size 2048 rate 48000}}]
+   (play-chord! 57174 (cond-> {:hardware-buffer-size size
+                               :hardware-samplerate rate}
+                        device (assoc :device device)) 15))
