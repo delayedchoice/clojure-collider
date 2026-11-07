@@ -62,8 +62,9 @@
            mixed (ops/+ (ops/* src (ops/- 1.0 wet)) (ops/* d wet))
            glued (ug/compander:ar mixed mixed 0.5 1.0 0.5 0.01 0.1)
            room (ug/freeverb:ar glued :mix 0.22 :room 0.8 :damp 0.4)
-           ;; Master 10s fade in/out over everything (voices + repeats).
-           fade-in (ug/env-gen:kr (ug/env [0.0 1.0] [10.0]))
+           ;; Master fade in/out over everything (voices + repeats): cubed
+           ;; 15s attack for true opening silence, linear 10s release.
+           fade-in (ug/env-gen:kr (ug/env [0.0 1.0] [15.0] :cubed))
            fade-out (ug/env-gen:kr (ug/env-asr 0.01 1.0 10.0) :gate gate)
            faded (ops/* room fade-in fade-out)]
        (ug/out:ar out faded))))
