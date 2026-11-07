@@ -7,6 +7,9 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-07 — prune dead backends on rig setup (REPL re-run NPE)
+ - Re-running a rig twice in one REPL NPEd every pattern step: `start-clock-loop` reuses the existing clock, so the dead first backend (device closed on quit → nil port → `intCast` NPE in `send-bundle`) ran before the live one and the `doseq` never reached it - total silence on run 2+. `prune-dead-backends!` now drops backends whose server has quit in both `setup-performance!` and `connect-server!` (server-less backends like DebugBackend are kept). Regression test `clock-rig-test` boots/quits/reboots and asserts a single backend bound to the live server.
+ - Status: decided
  ### 2026-11-07 — boot failures carry scsynth's log; port pre-check
  - `server-boot` used to throw bare "server failed to boot" while the reason scrolled past in the drain thread. The drain now keeps a 40-line ring per server (`boot-logs`, cleared on cleanup); both failure throws append the last 10 lines as "scsynth said:" and put them in ex-data `:scsynth-log` (inspect via `(ex-data *e)`).
  - Found via a port-clash test: a second boot on a taken port "succeeded" (boot? true, no process) because the old server answers the new one's /sync (UDP cross-talk). `server-boot` now probes the port with a `DatagramSocket` first (skipped for `:just-connect?`) and throws "port N already in use"; a post-poll liveness check also rejects a process that died mid-boot. Residual hole (process dying after a slow init while cross-talk answers) is accepted, not papered over with boot-delaying sleeps.

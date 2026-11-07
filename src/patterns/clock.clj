@@ -49,7 +49,19 @@
   ([clock b]
    (swap! (:enabled-backends clock)
           (fn [bs] (if (some #(identical? % b) bs) bs (conj bs b))))
-   b))
+    b))
+ 
+ (defn prune-dead-backends!
+   "Drop backends whose server has since quit (stale REPL rigs: re-running
+   a -main binds a new server while the old backend still points at the
+   closed device, and every step NPEs before reaching the live backend).
+   Backends without a :server (e.g. DebugBackend) are kept."
+   [clock]
+   (swap! (:enabled-backends clock)
+          (fn [bs] (filterv (fn [b] (let [s (:server b)]
+                                      (or (nil? s) (server/boot? s))))
+                            bs)))
+   clock)
 
 (defn disable-backend!
   "Remove backend B from clock's enabled backends. Returns B."
@@ -80,6 +92,9 @@
                               input? (assoc :num-input-bus 8)))))]
      (server/server-boot s)
      (start-clock-loop :tempo tempo)
+     ;; Re-running a rig in one REPL leaves backends bound to the quit
+     ;; server; prune them before this rig adds its own.
+     (prune-dead-backends! *clock*)
      s))
  
  (defn connect-server!
@@ -98,6 +113,9 @@
    (let [s (cond-> s input? (update :options assoc :num-input-bus 8))]
      (server/server-boot s)
      (start-clock-loop :tempo tempo)
+     ;; Same REPL re-run prune as setup-performance!: drop backends bound
+     ;; to quit servers before adding this rig's own.
+     (prune-dead-backends! *clock*)
      (enable-backend! (backend/make-cl-collider-backend s))
      s))
 
