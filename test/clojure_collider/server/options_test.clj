@@ -6,21 +6,26 @@
   (let [o (opts/make-server-options)]
     (is (= 16384 (:num-control-bus o)))
     (is (= 1024 (:num-audio-bus o)))
-    (is (= 0 (:verbosity o)))
-    (is (nil? (:device o))))
+    (is (nil? (:device o)))
+    (is (= 0 (:num-input-bus o)) "output-only by default"))
   (let [o (opts/make-server-options {:num-output-bus 2 :verbosity -1})]
     (is (= 2 (:num-output-bus o)))
     (is (= -1 (:verbosity o)))))
 
-(deftest cli-build
-  (let [args (opts/build-server-options
-              (opts/make-server-options {:ugen-plugins-path []}))]
-    (is (= ["-c" "16384" "-a" "1024" "-i" "8" "-o" "8" "-z" "64"
-            "-b" "1024" "-n" "1024" "-d" "1024" "-m" "8192" "-w" "64"
-            "-r" "64" "-D" "1" "-R" "1" "-l" "64" "-V" "0"]
-           args)))
-  (testing "nil/false omitted, -U joined, hw-buffer 0 dropped"
-    (let [args (opts/build-server-options
-                {:num-control-bus 1024 :device nil :verbosity false
-                 :hardware-buffer-size 0 :ugen-plugins-path ["/a" "/b"]})]
-      (is (= ["-c" "1024" "-U" "/a:/b"] args)))))
+ (deftest cli-build
+   (let [args (opts/build-server-options
+               (opts/make-server-options {:ugen-plugins-path []}))]
+     (is (= ["-c" "16384" "-a" "1024" "-i" "0" "-o" "8" "-z" "64"
+             "-b" "1024" "-n" "1024" "-d" "1024" "-m" "8192" "-w" "64"
+             "-r" "64" "-D" "1" "-R" "1" "-l" "64" "-V" "0"]
+            args)))
+   (testing "input opt-in emits -i 8"
+     (let [args (opts/build-server-options
+                 (opts/make-server-options {:num-input-bus 8
+                                            :ugen-plugins-path []}))]
+       (is (= "8" (second (drop-while #(not= "-i" %) args))))))
+   (testing "nil/false omitted, -U joined, hw-buffer 0 dropped"
+     (let [args (opts/build-server-options
+                 {:num-control-bus 1024 :device nil :verbosity false
+                  :hardware-buffer-size 0 :ugen-plugins-path ["/a" "/b"]})]
+       (is (= ["-c" "1024" "-U" "/a:/b"] args)))))

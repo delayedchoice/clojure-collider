@@ -6,7 +6,11 @@ Record every non-trivial choice here. Newest on top.
 
 _(none — all initial decisions locked 2026-10-02)_
 
- ## Decided
+  ## Decided
+ ### 2026-11-07 — output-only scsynth by default (`-i 0`), `:input?` opt-in
+ - `options/defaults` sets `:num-input-bus 0`: scsynth opens no input device, so rate-mismatched inputs (Bluetooth headset mics) can't fail boot. No in-repo SoundIn/hardware-input users (only internal-bus `in:ar`), so nothing breaks. Opt in with `{:num-input-bus 8}` at `make-external-server`, or `:input? true` on `setup-performance!`/`connect-server!` (both assoc 8 before boot).
+ - Trap found en route: upstream's `:input-stream-enabled`/`:output-stream-enabled` (`-I`/`-O`) are NOT real scsynth flags (verified `scsynth -h`, 3.13.0) — emitting `-I 0` kills boot. The `-i` channel count is the mechanism. Fields stay for upstream parity but must remain nil.
+ - Status: decided
  ### 2026-11-05 — `connect-server!` boot/clock/backend one-call
  - `patterns.clock/connect-server!` takes an existing server S: boots it, starts the clock at TEMPO (default 90), enables a `ClColliderBackend` on S, returns S for the binding form — `(binding [server/*s* (p/connect-server! s :tempo 90)] ...)`. Exported via the `pattern` facade. Takes S explicitly because the binding init-expr runs before `*s*` is bound. Explicit enable also suppresses `play`'s auto-backend (fires only with zero backends), so exactly one backend sounds. `examples/automatic_jazz.clj` is the first adopter (was 3 calls).
  - Status: decided

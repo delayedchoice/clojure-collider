@@ -14,7 +14,10 @@
 (def defaults
   {:num-control-bus 16384
    :num-audio-bus 1024
-   :num-input-bus 8
+   ;; Output-only by default (-i 0): scsynth opens no input device, so
+   ;; rate-mismatched inputs (e.g. Bluetooth headset mics) can't fail
+   ;; boot. Opt back in with {:num-input-bus 8}.
+   :num-input-bus 0
    :num-output-bus 8
    :block-size 64
    :hardware-buffer-size nil
@@ -42,7 +45,8 @@
                           ugen-plugins-path device input-stream-enabled output-stream-enabled])
 
 (defn make-server-options
-  "Defaults merged with `overrides` map."
+   "Defaults merged with `overrides` map. Input defaults OFF (-i 0,
+   output-only); pass {:num-input-bus 8} to open the input device."
   ([] (map->ServerOptions defaults))
   ([overrides] (map->ServerOptions (merge defaults overrides))))
 

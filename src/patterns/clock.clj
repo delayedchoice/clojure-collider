@@ -59,21 +59,25 @@
           (fn [bs] (vec (remove #(identical? % b) bs))))
    b))
 
-(defn setup-performance!
-  "One-call live rig: seed the pattern RNG, boot an external scsynth,
-  start the pattern clock. Returns the booted server - bind it:
-  (binding [server/*s* (setup-performance! :seed 7)] ...).
-  play auto-enables a sounding backend on the booted *s*, so no backend
-  wiring is needed. Defaults suit dense polyphonic examples."
-  [& {:keys [seed port tempo name options]
-      :or {seed 7 port 57138 tempo 120 name "example"}}]
-  (u/seed-rng! seed)
-  (let [s (server/make-external-server
-             name :port port
-             :options (or options
-                          (opts/make-server-options
-                           {:realtime-mem-size 65536
-                            :max-num-nodes 4096})))]
+ (defn setup-performance!
+   "One-call live rig: seed the pattern RNG, boot an external scsynth,
+   start the pattern clock. Returns the booted server - bind it:
+   (binding [server/*s* (setup-performance! :seed 7)] ...).
+   play auto-enables a sounding backend on the booted *s*, so no backend
+   wiring is needed. Defaults suit dense polyphonic examples.
+   Input streams are OFF by default (-i 0, output-only); pass :input?
+   true to open the input device. (Applies to the built default
+   options; explicit :options are used as-is.)"
+   [& {:keys [seed port tempo name options input?]
+       :or {seed 7 port 57138 tempo 120 name "example"}}]
+   (u/seed-rng! seed)
+   (let [s (server/make-external-server
+              name :port port
+              :options (or options
+                           (opts/make-server-options
+                            (cond-> {:realtime-mem-size 65536
+                                    :max-num-nodes 4096}
+                              input? (assoc :num-input-bus 8)))))]
      (server/server-boot s)
      (start-clock-loop :tempo tempo)
      s))
@@ -86,12 +90,16 @@
    Takes S explicitly (not server/*s*) because the binding init-expr runs
    before *s* is bound. Enabling up front also suppresses play's
    auto-backend (it only fires with no backends enabled), so exactly one
-   backend sounds."
-   [s & {:keys [tempo] :or {tempo 90}}]
-   (server/server-boot s)
-   (start-clock-loop :tempo tempo)
-   (enable-backend! (backend/make-cl-collider-backend s))
-   s)
+   backend sounds.
+   S boots input-free by default (-i 0, output-only); :input? true
+   opens the input device (assocs :num-input-bus 8 into S's options
+   before boot)."
+   [s & {:keys [tempo input?] :or {tempo 90}}]
+   (let [s (cond-> s input? (update :options assoc :num-input-bus 8))]
+     (server/server-boot s)
+     (start-clock-loop :tempo tempo)
+     (enable-backend! (backend/make-cl-collider-backend s))
+     s))
 
 ;; -- beats / quant --------------------------------------------------------------
 
