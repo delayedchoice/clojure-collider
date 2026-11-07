@@ -34,14 +34,14 @@
 
 (defn- define-voices! []
   (sdef/defsynth :discreet
-    [Freq 440
+    [freq 440
      amp 0.22
      gate 1
      out 0
      pan 0.0]
-    (let [rate (ops/+ 0.35 (ops// Freq 2400.0))
+    (let [rate (ops/+ 0.35 (ops// freq 2400.0))
           vib (ug/sin-osc:kr rate 0 1.0)
-          f (ops/* Freq (ops/+ 1.0 (ops/* 0.004 vib)))
+          f (ops/* freq (ops/+ 1.0 (ops/* 0.004 vib)))
           src (ops/+ (ops/* (ug/sin-osc:ar f 0 1.0) 0.6)
                      (ops/* (ug/saw:ar f 1.0 0.0) 0.22))
           dark (ug/lpf:ar src 900.0 1.0 0.0)
