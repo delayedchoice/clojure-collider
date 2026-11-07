@@ -4,8 +4,8 @@
  ;;   (bluetooth-headphones/baseline)          ; Step 1: defaults
  ;;   (bluetooth-headphones/explicit-device)   ; Step 2: pin -H to the AirPods
  ;;   (bluetooth-headphones/big-buffer)        ; Step 3: -Z 1024 (or 2048)
- ;;   (bluetooth-headphones/forced-rate)       ; Step 4: -S 48000 (or 44100)
- ;;   (bluetooth-headphones/kitchen-sink)      ; everything at once
+ ;;   (bluetooth-headphones/forced-rate)       ; Step 4: -S, LAST RESORT only
+ ;;   (bluetooth-headphones/kitchen-sink)      ; buffer-only max combo
  ;; Each plays a 440/442 test chord for 15s (buzz is obvious on a pure
  ;; tone), then quits its server. Note which step goes clean and report it.
  ;;
@@ -98,10 +98,11 @@
                         device (assoc :device device)) 15))
 
  (defn forced-rate
-   "Step 4: buffer + a forced hardware sample rate (-S). No -H by default
-   (see big-buffer: duplicated AirPods names make -H grab the mic end).
-   Use the MUSIC endpoint's rate (48k on yours) - the mic endpoint's 24k
-   is irrelevant, we never open it. If 48k still buzzes, try 44100.
+   "Step 4 (LAST RESORT - may wedge system audio): buffer + a forced
+   hardware sample rate (-S). On AirPods, -S 48000 was refused with
+   'Requested sample rate ... was not available - attempting 44100',
+   and the fallback wedged ALL system audio (recover with
+   `sudo killall coreaudiod`). Prefer device-chosen rate + big buffer.
    Run: (bluetooth-headphones/forced-rate)
    Other rate: (bluetooth-headphones/forced-rate :rate 44100)"
    [& {:keys [device size rate] :or {size 1024 rate 48000}}]
@@ -110,10 +111,13 @@
                         device (assoc :device device)) 15))
  
  (defn kitchen-sink
-   "Everything at once: big buffer + forced rate (+ -H only if passed).
-   The most forgiving combo; narrow it down afterwards by dropping keys.
+   "Everything at once: big buffer, and a forced rate ONLY if you pass
+   :rate. Lesson learned the hard way: forcing -S on AirPods made macOS
+   refuse and fall back mid-stream, wedging ALL system audio (recover
+   with `sudo killall coreaudiod` before rebooting). The device-chosen
+   rate + big buffer is the forgiving combo.
    Run: (bluetooth-headphones/kitchen-sink)"
-   [& {:keys [device size rate] :or {size 2048 rate 48000}}]
-   (play-chord! 57174 (cond-> {:hardware-buffer-size size
-                               :hardware-samplerate rate}
+   [& {:keys [device size rate] :or {size 2048}}]
+   (play-chord! 57174 (cond-> {:hardware-buffer-size size}
+                        rate (assoc :hardware-samplerate rate)
                         device (assoc :device device)) 15))
