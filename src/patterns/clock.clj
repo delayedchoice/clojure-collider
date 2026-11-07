@@ -55,11 +55,18 @@
    "Drop backends whose server has since quit (stale REPL rigs: re-running
    a -main binds a new server while the old backend still points at the
    closed device, and every step NPEs before reaching the live backend).
-   Backends without a :server (e.g. DebugBackend) are kept."
+   A backend survives only with a booted server AND a live OSC device
+   (belt and suspenders: a lost /quit reply can leave boot? true on a
+   device-less server). Backends without a :server (e.g. DebugBackend)
+   are kept."
    [clock]
    (swap! (:enabled-backends clock)
           (fn [bs] (filterv (fn [b] (let [s (:server b)]
-                                      (or (nil? s) (server/boot? s))))
+                                      (or (nil? s)
+                                          (and (server/boot? s)
+                                               (let [dev @(:device s)]
+                                                 (and (some? dev)
+                                                      (= :running @(:status dev))))))))
                             bs)))
    clock)
 

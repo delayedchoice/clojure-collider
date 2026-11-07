@@ -19,7 +19,10 @@
         (binding [server/*s* (clock/connect-server! s1 :tempo 90)]
           (testing "first rig wires one backend"
             (is (= 1 (count @(:enabled-backends clock/*clock*))))))
-        (server/server-quit s1)
+         (server/server-quit s1)
+         ;; Simulate a lost /quit reply: cleanup closed the device while
+         ;; boot? stayed true. The prune must still drop the corpse.
+         (reset! (:boot? s1) true)
         (let [s2 (try-make "rig-b" 57183)]
           (when s2
             (try
@@ -30,8 +33,9 @@
                     (is (identical? s2 (:server (first bs)))))))
               (finally
                 (when (server/boot? s2) (server/server-quit s2))))))
-        (finally
-          (clock/stop :all)
-          (when (server/boot? s1) (server/server-quit s1))
+         (finally
+           (clock/stop :all)
+           ;; s1's boot? flag is simulated-stuck above (device really
+           ;; closed); only s2 may need quitting here.
            (when-let [tc (:tempo-clock clock/*clock*)]
-            (sched/tempo-clock-stop tc)))))))
+             (sched/tempo-clock-stop tc)))))))

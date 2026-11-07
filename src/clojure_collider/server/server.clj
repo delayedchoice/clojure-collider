@@ -242,9 +242,11 @@
         server)
     ;; See ntp-timetag: split seconds/fraction so live bundles land now,
     ;; not in year 2262.
-    (let [dev @(:device server)
-          tt (ntp-timetag time (:latency server))]
-      (apply tx/send-bundle dev tt messages))))
+     (let [dev @(:device server)
+           _ (when (nil? dev)
+               (throw (ex-info "server has no OSC device (quit?)" {:server (:name server)})))
+           tt (ntp-timetag time (:latency server))]
+       (apply tx/send-bundle dev tt messages))))
 
 (defn install-reply-responder [server cmd f]
   (tx/add-osc-responder @(:device server) (str cmd) f))
@@ -430,8 +432,12 @@
   (when-let [dev @(:device server)]
     (tx/close-device dev)
     (reset! (:device server) nil))
-  (swap! boot-logs dissoc (:name server))
-  server)
+   (swap! boot-logs dissoc (:name server))
+   ;; The process is gone by now (destroyed above if it was wedged), so a
+   ;; boot? left true by a lost /quit reply must not survive: it makes
+   ;; everything downstream believe in a server that has no device.
+   (reset! (:boot? server) false)
+   server)
 
 
 (defn server-boot [server]

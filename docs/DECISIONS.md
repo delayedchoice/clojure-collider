@@ -7,6 +7,9 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-07 — cleanup resets boot?; prune needs a live device; send-bundle guard
+ - The re-run NPE survived the first prune: `server-quit` clears `boot?` only via the `/quit` reply, so a lost reply (easy on a wedged-Bluetooth box past the 5s poll) leaves `boot?` true on a device-less server, and `boot?`-only pruning keeps the corpse. Three layers: (1) `cleanup-server` now resets `boot?` false - the process is destroyed there in all paths, so true-after-cleanup was always a lie; (2) prune requires a booted server AND a `:running` OSC device; (3) `send-bundle` throws the same named "no OSC device" error `send-message` has instead of an `intCast` NPE. `clock-rig-test` simulates the lost reply (`boot?` forced true post-quit) and asserts the prune.
+ - Status: decided
  ### 2026-11-07 — `discreet_music` in Ab major, teropa rhythms
  - Example `discreet_music.clj` implements the reverbmachine recipe (Synthi voice: sine + touch of saw, pitch-tracking vibrato, dark LPF, slow attack; 160ms Echoplex comb per voice; 5.65s Frippertronics loop w/ feedback + glue compander + room). Key is Ab major per the article (right loop outlines Ab-C-Eb + 6th F; left has the Db-vs-C rub + four-note closing motif); the two published sources disagree on absolute key (teropa's transcription sits in C-ish), so rhythms/loop lengths (68s/74s) follow teropa exactly while pitch classes follow the article. Half-speed lore is baked in - everything runs at final-record speed. NRT-verified peak 0.17, no clipping.
  - Status: decided
