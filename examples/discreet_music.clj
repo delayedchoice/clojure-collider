@@ -49,26 +49,30 @@
           echo (ug/comb-n:ar (ops/* dark env) 0.5 0.16 1.5 1.0 0.0)
           sig (ops/+ (ops/* dark env 0.6) (ops/* echo 0.4))]
       (ug/out:ar out (ug/pan2:ar (ops/* sig amp) pan 1.0))))
-  (sdef/defsynth :discreet-loop
-    [inbus 16
-     out 0
-     wet 0.45
-     fb 0.72]
-    (let [src (ug/in:ar inbus 2)
-          echo (ug/local-in:ar 2 0.0)
-          d (ug/delay-l:ar (ops/+ src echo) 6.0 5.65 1.0 0.0)
-          _ (ug/local-out:ar (ops/* d fb))
-          mixed (ops/+ (ops/* src (ops/- 1.0 wet)) (ops/* d wet))
-          glued (ug/compander:ar mixed mixed 0.5 1.0 0.5 0.01 0.1)
-          room (ug/freeverb:ar glued :mix 0.22 :room 0.8 :damp 0.4)]
-      (ug/out:ar out room))))
-
-(defn -main [& [secs-arg]]
-  (let [secs (if secs-arg (Long/parseLong secs-arg) 150)
-        s (server/make-external-server "discreet" :port 57175)]
-    (binding [server/*s* (p/connect-server! s :tempo 120)]
-      (define-voices!)
-      (let [loop (sdef/synth :discreet-loop :inbus 16)]
+   (sdef/defsynth :discreet-loop
+     [inbus 16
+      out 0
+      wet 0.45
+      fb 0.72
+      gate 1]
+     (let [src (ug/in:ar inbus 2)
+           echo (ug/local-in:ar 2 0.0)
+           d (ug/delay-l:ar (ops/+ src echo) 6.0 5.65 1.0 0.0)
+           _ (ug/local-out:ar (ops/* d fb))
+           mixed (ops/+ (ops/* src (ops/- 1.0 wet)) (ops/* d wet))
+           glued (ug/compander:ar mixed mixed 0.5 1.0 0.5 0.01 0.1)
+           room (ug/freeverb:ar glued :mix 0.22 :room 0.8 :damp 0.4)
+           ;; Master 10s fade in/out over everything (voices + repeats).
+           fade-in (ug/env-gen:kr (ug/env [0.0 1.0] [10.0]))
+           fade-out (ug/env-gen:kr (ug/env-asr 0.01 1.0 10.0) :gate gate)
+           faded (ops/* room fade-in fade-out)]
+       (ug/out:ar out faded))))
+ (defn -main [& [secs-arg]]
+   (let [secs (if secs-arg (Long/parseLong secs-arg) 150)
+         s (server/make-external-server "discreet" :port 57175)]
+     (binding [server/*s* (p/connect-server! s :tempo 120)]
+       (define-voices!)
+       (let [loop (sdef/synth :discreet-loop :inbus 16)]
         (p/pb :discreet-left
           :instrument :discreet
           :midinote (p/pseq left-notes)
@@ -83,10 +87,14 @@
           :pan 0.5 :out-bus 16 :loop true)
         (p/play :discreet-left)
         (p/play :discreet-right)
-        (Thread/sleep (* 1000 secs))
-        (p/stop :discreet-left)
-        (p/stop :discreet-right)
-        (Thread/sleep 10000)
-        (server/node-free loop)))
+         ;; 10s master fade-out on the loop starts here; voices keep
+         ;; playing into it so the whole mix fades as one. Short pieces
+         ;; (<= 10s) skip the fade and end plain.
+         (Thread/sleep (* 1000 (max 0 (- secs 10))))
+         (when (> secs 10) (server/ctrl loop :gate 0))
+         (Thread/sleep (if (> secs 10) 10000 (* 1000 secs)))
+         (p/stop :discreet-left)
+         (p/stop :discreet-right)
+         (server/node-free loop)))
     (server/server-quit s)
     (println :done)))
