@@ -5,11 +5,11 @@
 ;; Deviation: the cookbook leaves :instrument implicit (SC's default synth);
 ;; we define a small gated voice here since cl-collider has no stock default.
 (ns automatic-jazz
-  (:require [clojure-collider.server.server :as server]
-            [clojure-collider.synth.sdef :as sdef]
-            [ugens :as ug]
-            [pattern :as p]))
-
+   (:require [clojure-collider.server.server :as server]
+             [clojure-collider.server.options :as opts]
+             [clojure-collider.synth.sdef :as sdef]
+             [ugens :as ug]
+             [pattern :as p]))
 (defn -main [& _]
   (let [s (server/make-external-server "example" :port 57137)]
      (binding [server/*s* (p/connect-server! s :tempo 90)]
