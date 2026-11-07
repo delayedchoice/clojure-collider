@@ -15,7 +15,8 @@
             [clojure-collider.server.options :as opts]
             [clojure-collider.server.scheduler :as sched])
   (:import [java.util.concurrent ConcurrentHashMap CompletableFuture TimeUnit ConcurrentLinkedQueue]
-           [java.util.concurrent.locks ReentrantLock]))
+           [java.util.concurrent.locks ReentrantLock]
+           [java.net DatagramSocket]))
 (declare server-free-all make-group send-bundle)
 
 ;; -- dynamics ------------------------------------------------------------
@@ -34,6 +35,15 @@
 (def ^:private boot-hooks (atom []))
 (def ^:private quit-hooks (atom []))
 (def ^:private all-servers (atom []))
+(def ^:private boot-logs
+  "Recent scsynth stderr lines per server name (ring of 40). Boot reads
+  these so a failed boot can report scsynth's own reason instead of a
+  bare failure. Dissoc'd on cleanup."
+  (atom {}))
+(defn- log-boot-line! [server line]
+  (swap! boot-logs update (:name server)
+         (fn [v] (let [v (conj (or v []) line)]
+                   (if (> (count v) 40) (subvec v 1) v)))))
 (def server-free-all-hooks (atom []))
 (def stop-hooks (atom []))
 
@@ -380,19 +390,29 @@
 (defn- scsynth-args [server]
   (into ["-u" (str (:port server))] (opts/build-server-options (:options server))))
 
-(defn- bootup-server-process [server]
-  (when-not (:just-connect? server)
+(defn- check-port-free! [server]
+   ;; Fail fast when PORT is already bound (usually another scsynth):
+   ;; without this the new process dies on bind while the old server
+   ;; answers our /sync (UDP cross-talk), and boot? comes up true with
+   ;; no process behind it.
+   (try (with-open [_ (DatagramSocket. (int (:port server)))] nil)
+        (catch java.net.BindException _
+          (throw (ex-info (str "port " (:port server) " already in use")
+                         {:server (:name server) :port (:port server)})))))
+ (defn- bootup-server-process [server]
+   (when-not (:just-connect? server)
     (let [pb (doto (ProcessBuilder. ^java.util.List (into [*sc-synth-program*] (scsynth-args server)))
                (.redirectErrorStream true))
           proc (.start pb)
           drain (doto (Thread. ^Runnable
-                               (fn []
-                                 (let [rdr (io/reader (.getInputStream proc))]
-                                   (loop [line (.readLine ^java.io.BufferedReader rdr)]
-                                     (when (some? line)
-                                       (binding [*out* *err*]
-                                         (println (str "[" (:name server) "]") line))
-                                       (recur (.readLine ^java.io.BufferedReader rdr)))))))
+                                (fn []
+                                  (let [rdr (io/reader (.getInputStream proc))]
+                                    (loop [line (.readLine ^java.io.BufferedReader rdr)]
+                                      (when (some? line)
+                                        (log-boot-line! server line)
+                                        (binding [*out* *err*]
+                                          (println (str "[" (:name server) "]") line))
+                                        (recur (.readLine ^java.io.BufferedReader rdr)))))))
                   (.setDaemon true))]
       (.start drain)
       (reset! (:sc-process server) proc)
@@ -410,12 +430,14 @@
   (when-let [dev @(:device server)]
     (tx/close-device dev)
     (reset! (:device server) nil))
+  (swap! boot-logs dissoc (:name server))
   server)
 
 
 (defn server-boot [server]
   (when (boot? server)
     (throw (ex-info "server already running" {:server (:name server)})))
+  (when-not (:just-connect? server) (check-port-free! server))
   (bootup-server-process server)
   (initialize-server-responder server)
   ;; Upstream retries bootup while the scsynth thread is alive (server.lisp
@@ -433,9 +455,20 @@
         (Thread/sleep 30)
         (recur (inc tries)))))
   (when-not (boot? server)
-    (cleanup-server server)
-    (throw (ex-info "server failed to boot" {:server (:name server)})))
-  (reset! (:node-watcher server) [0])
+     (let [tail (take-last 10 (get @boot-logs (:name server) []))]
+       (cleanup-server server)
+       (throw (ex-info (str "server failed to boot"
+                            (when (seq tail) (str "\nscsynth said:\n" (str/join "\n" tail))))
+                       {:server (:name server) :scsynth-log tail}))))
+  ;; Our own process died while another server on the port answered /sync
+  ;; (UDP cross-talk): boot? is true but there is no server. Fail loudly.
+  (let [proc @(:sc-process server)]
+     (when (and proc (not (.isAlive ^Process proc)))
+       (let [tail (take-last 10 (get @boot-logs (:name server) []))]
+         (cleanup-server server)
+         (throw (ex-info (str "server process died during boot"
+                              (when (seq tail) (str "\nscsynth said:\n" (str/join "\n" tail))))
+                         {:server (:name server) :scsynth-log tail})))))
   (send-message server "/notify" (int 1))
   (send-message server "/status")
   (sched/sched-run @(:scheduler server))

@@ -7,6 +7,10 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-07 — boot failures carry scsynth's log; port pre-check
+ - `server-boot` used to throw bare "server failed to boot" while the reason scrolled past in the drain thread. The drain now keeps a 40-line ring per server (`boot-logs`, cleared on cleanup); both failure throws append the last 10 lines as "scsynth said:" and put them in ex-data `:scsynth-log` (inspect via `(ex-data *e)`).
+ - Found via a port-clash test: a second boot on a taken port "succeeded" (boot? true, no process) because the old server answers the new one's /sync (UDP cross-talk). `server-boot` now probes the port with a `DatagramSocket` first (skipped for `:just-connect?`) and throws "port N already in use"; a post-poll liveness check also rejects a process that died mid-boot. Residual hole (process dying after a slow init while cross-talk answers) is accepted, not papered over with boot-delaying sleeps.
+ - Status: decided
  ### 2026-11-07 — scheduler error traces + guarded gate-0
  - `scheduler/run-tasks` printed only `.getMessage` (e.g. a bare NPE "in scheduler thread" with no origin). Now prints exception class + message + thread name + full stack trace. No tests depended on the one-line format.
  - `backend/play-event`'s scheduled gate-0 could hit an already-freed voice (`FAILURE IN SERVER /n_set Node N not found`, reproduced locally on the first voice). The callback now skips when `server/is-playing?` (node-watcher `/n_end`) is false; a residual check-then-send race stays loud. Verified: jazz re-run shows only the benign `late` line.
