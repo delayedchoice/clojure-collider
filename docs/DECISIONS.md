@@ -7,6 +7,10 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-07 — `thursday_afternoon` + `music_for_airports` reconstructions
+ - `thursday_afternoon.clj`: G dom7 + C (article), voice/detail from pitch-detecting the article's own sample pack (8 DX7 sines G3-D5, 7 piano notes B3-D5, G-triad drone), loop times 16-19.3s with +-0.6s per-repeat jitter (the article's range; exact per-loop times unpublished). DX7 voice = single sine w/ 2.11s decay; piano = additive plink. Amps set by NRT stress (peak 0.28).
+ - `music_for_airports.clj` (tracks `2/1`, `1/2`; `1/1` omitted - no reliable note data): `2/1` = 7 sung loops (Ab4 F4 C4 Eb4 Db4 Ab3 F3, pitch-detected from the article's Choir loops; times from teropa's independent reconstruction, whose octave choices differ - documented in-file), choir voice = layered sines + slow attack; `1/2` = 8 piano phrases from onset-segmented pitch detection of the article's Piano loops (D major w/ C naturals, Mixolydian colour as the article says). Peaks 0.40/0.48, no clipping.
+ - Status: decided
  ### 2026-11-07 — bounce schedules its own gate-offs (NRT has no clock)
  - Long `discreet_music` bounces died with `CombN_Ctor: alloc failed` from ~t=141 and rendered a too-loud wash before that: the backend releases voices via `server/callback`, which needs a running scheduler clock - dead in NRT - so voices sustained forever, leaking RT memory per voice. `bounce` now `at`s an explicit `gate 0` per gated voice in score time (same `sus/bps` math as the backend). 180s re-render: zero alloc failures, peak 0.22, steady RMS throughout. Any future NRT path must do the same - `server/callback` is live-only.
  - Status: decided
