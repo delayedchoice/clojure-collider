@@ -1,30 +1,54 @@
-;; Bluetooth headphones bring-up (e.g. AirPods buzzing/crackling).
-;; Run from a REPL - one scenario at a time, they all grab the audio device:
-;;   (require 'bluetooth-headphones)
-;;   (bluetooth-headphones/baseline)          ; Step 1: defaults
-;;   (bluetooth-headphones/explicit-device)   ; Step 2: pin -H to the AirPods
-;;   (bluetooth-headphones/big-buffer)        ; Step 3: -Z 1024 (or 2048)
-;;   (bluetooth-headphones/forced-rate)       ; Step 4: -S 48000 (or 44100)
-;;   (bluetooth-headphones/kitchen-sink)      ; everything at once
-;; Each plays a 440/442 test chord for 15s (buzz is obvious on a pure
-;; tone), then quits its server. Note which step goes clean and report it.
-;;
-;; Before ANY scenario, do the macOS half (this fixes most cases alone):
-;;   1. System Settings -> Sound -> Output = your AirPods (NOT "Multi-Output
-;;      Device" - aggregates drift and buzz).
-;;   2. Same pane -> Input = "MacBook Pro Microphone". Any app holding the
-;;      AirPods mic drops the whole headset to low-quality headset mode.
-;;      The orange mic dot in the menu bar must be OFF (quit Zoom/Meet/etc).
-;;   3. Audio MIDI Setup (Utilities) -> AirPods output -> note Format rate.
-(ns bluetooth-headphones
-  (:require [clojure-collider.server.server :as server]
-            [clojure-collider.server.options :as opts]
-            [clojure-collider.synth.sdef :as sdef]
-            [ugens :as ug]))
+ ;; Bluetooth headphones bring-up (e.g. AirPods buzzing/crackling).
+ ;; Run from a REPL - one scenario at a time, they all grab the audio device:
+ ;;   (require 'bluetooth-headphones)
+ ;;   (bluetooth-headphones/baseline)          ; Step 1: defaults
+ ;;   (bluetooth-headphones/explicit-device)   ; Step 2: pin -H to the AirPods
+ ;;   (bluetooth-headphones/big-buffer)        ; Step 3: -Z 1024 (or 2048)
+ ;;   (bluetooth-headphones/forced-rate)       ; Step 4: -S 48000 (or 44100)
+ ;;   (bluetooth-headphones/kitchen-sink)      ; everything at once
+ ;; Each plays a 440/442 test chord for 15s (buzz is obvious on a pure
+ ;; tone), then quits its server. Note which step goes clean and report it.
+ ;;
+ ;; Why TWO AirPods entries in Audio MIDI Setup? macOS exposes one
+ ;; physical headset as two logical CoreAudio devices, one per Bluetooth
+ ;; profile: the hands-free/mic endpoint ("...Pro 1": 1 in, 0 out, ~24k)
+ ;; and the stereo music endpoint ("...Pro 2": 0 in, 2 out, 48k). This is
+ ;; also what your original boot failure was: with inputs enabled,
+ ;; scsynth tried to open the 24k mic endpoint while output ran at 48k.
+ ;; We now boot output-only (-i 0), so we only ever touch the "Pro 2"
+ ;; music endpoint - the mic one is never opened. But the converse still
+ ;; bites: if ANY app opens the mic endpoint, the headset drops to
+ ;; low-quality headset mode and our music endpoint buzzes with it.
+ ;;
+ ;; Which name to use for -H? The 0-in / 2-out MUSIC endpoint. Get its
+ ;; exact spelling from the device list our own boot prints (look for the
+ ;; entry whose Output block shows 2 channels), or from Audio MIDI Setup;
+ ;; pass it explicitly, e.g. (explicit-device "Robert's Airpods Pro 2").
+ ;; Watch the quote character: macOS names often use a curly ’ (U+2019) -
+ ;; copy it, don't retype it as ASCII ', or -H won't match.
+ ;;
+ ;; Before ANY scenario, do the macOS half (this fixes most cases alone):
+ ;;   1. System Settings -> Sound -> Output = the MUSIC endpoint above
+ ;;      (NOT "Multi-Output Device" - aggregates drift and buzz).
+ ;;   2. Same pane -> Input = "MacBook Pro Microphone". This keeps the
+ ;;      AirPods mic endpoint untouched so macOS holds high-quality A2DP
+ ;;      instead of dropping to headset mode.
+ ;;   3. Quit anything holding the mic (Zoom/Meet/etc). The orange mic dot
+ ;;      in the menu bar must be OFF.
+ ;;   4. The rate to force in Step 4 is the music endpoint's rate (48k);
+ ;;      the mic endpoint's 24k is irrelevant to us - we never open it.
+ (ns bluetooth-headphones
+   (:require [clojure-collider.server.server :as server]
+             [clojure-collider.server.options :as opts]
+             [clojure-collider.synth.sdef :as sdef]
+             [ugens :as ug]))
 
-(def default-device "Robert’s AirPods P")
-;; NB: the ’ above is a CURLY quote (U+2019) - copy it from the scsynth
-;; device list, don't retype it as ASCII ', or -H won't match.
+ (def default-device "Robert’s AirPods P")
+ ;; Placeholder: replace with YOUR 0-in / 2-out music endpoint, copied
+ ;; exactly from the device list our boot prints (or Audio MIDI Setup).
+ ;; NB: macOS names often use a curly ’ (U+2019) - copy it, don't retype
+ ;; it as ASCII ', or -H won't match. Or pass the name per call, e.g.
+ ;; (explicit-device "Robert's Airpods Pro 2").
 
 (defn- play-chord!
   "Boot on PORT with OPTS, play a 440/442 chord for SECS, quit. Private."
@@ -46,13 +70,15 @@
   []
   (play-chord! 57170 {} 15))
 
-(defn explicit-device
-  "Step 2: pin scsynth straight at the AirPods with -H, bypassing whatever
-   macOS has as default (often a drifting Multi-Output aggregate).
+ (defn explicit-device
+   "Step 2: pin scsynth straight at the AirPods MUSIC endpoint with -H,
+   bypassing whatever macOS has as default (often a drifting Multi-Output
+   aggregate). Use the 0-in / 2-out entry (the 1-in mic entry is the wrong
+   device - opening it drops the headset to low-quality mode).
    Run: (bluetooth-headphones/explicit-device)
-   Other headphones: (bluetooth-headphones/explicit-device \"Name Here\")"
-  [& [device]]
-  (play-chord! 57171 {:device (or device default-device)} 15))
+   Exact name: (bluetooth-headphones/explicit-device \"Robert's Airpods Pro 2\")"
+   [& [device]]
+   (play-chord! 57171 {:device (or device default-device)} 15))
 
 (defn big-buffer
   "Step 3: device + a larger hardware buffer (-Z) for Bluetooth jitter.
@@ -64,9 +90,9 @@
                       :hardware-buffer-size (or size 1024)} 15))
 
 (defn forced-rate
-  "Step 4: device + buffer + a forced hardware sample rate (-S). Start
-   with the Format rate Audio MIDI Setup shows for the AirPods (usually
-   48000); if it still buzzes, try the other one.
+   "Step 4: device + buffer + a forced hardware sample rate (-S). Use the
+   MUSIC endpoint's rate (48k on yours) - the mic endpoint's 24k is
+   irrelevant, we never open it. If 48k still buzzes, try 44100.
    Run: (bluetooth-headphones/forced-rate)
    Other rate: (bluetooth-headphones/forced-rate 44100)"
   [& [rate]]
