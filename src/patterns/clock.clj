@@ -199,12 +199,18 @@
                                 ts)))
           (step-task! clock (assoc task :stream fresh) (inc depth)))
         (remove-task! clock task))
-      (let [event-map (if (map? v) v (ev/event :value v))
-            beat @(:next-beat task)
-            sec (beat->sec clock beat)
-            delta (or (ev/event-value event-map :delta) 1)]
-        (doseq [b @(:enabled-backends clock)]
-          (backend/play-event b event-map sec))
+       (let [event-map (if (map? v) v (ev/event :value v))
+             beat @(:next-beat task)
+             sec (beat->sec clock beat)
+             ;; Releases are computed in seconds from :sustain (beats):
+             ;; the backend needs beats/sec, not the 60bpm default.
+             bps (if-let [tc (:tempo-clock clock)]
+                   (/ (double (sched/tempo-clock-bpm tc)) 60.0)
+                   1.0)
+             event-map (assoc event-map :tempo bps)
+             delta (or (ev/event-value event-map :delta) 1)]
+         (doseq [b @(:enabled-backends clock)]
+           (backend/play-event b event-map sec))
         (reset! (:next-beat task) (+ beat (double delta)))
         (when-let [tc (:tempo-clock clock)]
           (let [nb @(:next-beat task)]

@@ -67,26 +67,57 @@
            fade-out (ug/env-gen:kr (ug/env-asr 0.01 1.0 10.0) :gate gate)
            faded (ops/* room fade-in fade-out)]
        (ug/out:ar out faded))))
- (defn -main [& [secs-arg]]
-   (let [secs (if secs-arg (Long/parseLong secs-arg) 150)
-         s (server/make-external-server "discreet" :port 57175)]
+ (defn- define-sequences! []
+   (p/pb :discreet-left
+     :instrument :discreet
+     :midinote (p/pseq left-notes)
+     :dur (p/pseq left-durs)
+     :sustain (p/pseq left-sus)
+     :pan -0.5 :out-bus 16 :loop true)
+   (p/pb :discreet-right
+     :instrument :discreet
+     :midinote (p/pseq right-notes)
+     :dur (p/pseq right-durs)
+     :sustain (p/pseq right-sus)
+     :pan 0.5 :out-bus 16 :loop true))
+ 
+ (defn bounce
+   "Deterministic offline render of SECS seconds to OUT (AIFF): pulls both
+   loops synchronously (no wall clock), replays them at 120bpm through a
+   backend, loop synth with the same 10s fade-out as the live rig. No
+   server needed. Convert to mp3 afterwards, e.g.
+   `ffmpeg -y -i OUT -codec:a libmp3lame -qscale:a 2 OUT.mp3`
+   (or on macOS: `afconvert -f MPG3 -d '.mp3' OUT OUT.mp3`)."
+   [secs out]
+   (let [bps 2.0
+         end-beat (* (double secs) bps)
+         _ (define-sequences!)
+         dbg (p/make-debug-backend)
+         evts (sort-by :beat
+                (mapcat (fn [k]
+                          (take-while #(<= (:beat %) end-beat)
+                            (p/play-take (p/pdef k) 100000 dbg)))
+                        [:discreet-left :discreet-right]))]
+     (server/with-rendering [out :sr 44100 :pad (+ (double secs) 12.0)]
+       (define-voices!)
+       (let [loop (sdef/synth :discreet-loop :inbus 16)
+             be (p/make-cl-collider-backend server/*s*)]
+         (doseq [{:keys [beat event]} evts]
+           (p/play-event be (assoc event :tempo bps)
+                         (* (double beat) (/ 1.0 bps))))
+         (server/at (double (max 0 (- secs 10)))
+           (server/ctrl loop :gate 0))
+         (server/at (double secs)
+           (server/node-free loop))))))
+ 
+ (defn- live-main [secs]
+   (let [s (server/make-external-server "discreet" :port 57175)]
      (binding [server/*s* (p/connect-server! s :tempo 120)]
        (define-voices!)
+       (define-sequences!)
        (let [loop (sdef/synth :discreet-loop :inbus 16)]
-        (p/pb :discreet-left
-          :instrument :discreet
-          :midinote (p/pseq left-notes)
-          :dur (p/pseq left-durs)
-          :sustain (p/pseq left-sus)
-          :pan -0.5 :out-bus 16 :loop true)
-        (p/pb :discreet-right
-          :instrument :discreet
-          :midinote (p/pseq right-notes)
-          :dur (p/pseq right-durs)
-          :sustain (p/pseq right-sus)
-          :pan 0.5 :out-bus 16 :loop true)
-        (p/play :discreet-left)
-        (p/play :discreet-right)
+         (p/play :discreet-left)
+         (p/play :discreet-right)
          ;; 10s master fade-out on the loop starts here; voices keep
          ;; playing into it so the whole mix fades as one. Short pieces
          ;; (<= 10s) skip the fade and end plain.
@@ -96,5 +127,12 @@
          (p/stop :discreet-left)
          (p/stop :discreet-right)
          (server/node-free loop)))
-    (server/server-quit s)
-    (println :done)))
+     (server/server-quit s)
+     (println :done)))
+ 
+ (defn -main [& args]
+   (if (= "bounce" (first args))
+     (let [[_ secs-arg out] args
+           secs (if secs-arg (Long/parseLong secs-arg) 150)]
+       (println :rendered (bounce secs (or out "/tmp/discreet.aiff"))))
+     (live-main (if-let [secs-arg (first args)] (Long/parseLong secs-arg) 150))))

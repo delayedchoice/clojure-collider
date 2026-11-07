@@ -7,6 +7,10 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-07 — `discreet_music bounce` + backend tempo fix
+ - `discreet_music bounce SECS OUT` renders deterministically (no wall clock): pulls both loops via `play-take`, replays events at absolute 120bpm times through a backend inside `with-rendering`, loop synth with the same 10s fade-out. Pad doubles as the score cutoff, so it spans `secs + 12`. Verified: 30s bounce renders 42.0s, peak 0.31, fade-in swell then 20-30s fade to digital silence; `ffmpeg -y -i OUT -codec:a libmp3lame -qscale:a 2 OUT.mp3` (or macOS `afconvert -f MPG3 -d '.mp3'`) produces the mp3.
+ - Found while building it: the pattern backend computed gate release from event `:sustain` (beats) assuming 60bpm (`:tempo` default 1, never set anywhere), so every non-60 rig released late (2x at 120, 1.5x at jazz's 90). `step-body!` now assocs the clock's beats/sec into each event. Affects all pattern playback for the better; suite green.
+ - Status: decided
  ### 2026-11-07 — cleanup resets boot?; prune needs a live device; send-bundle guard
  - The re-run NPE survived the first prune: `server-quit` clears `boot?` only via the `/quit` reply, so a lost reply (easy on a wedged-Bluetooth box past the 5s poll) leaves `boot?` true on a device-less server, and `boot?`-only pruning keeps the corpse. Three layers: (1) `cleanup-server` now resets `boot?` false - the process is destroyed there in all paths, so true-after-cleanup was always a lie; (2) prune requires a booted server AND a `:running` OSC device; (3) `send-bundle` throws the same named "no OSC device" error `send-message` has instead of an `intCast` NPE. `clock-rig-test` simulates the lost reply (`boot?` forced true post-quit) and asserts the prune.
  - Status: decided
