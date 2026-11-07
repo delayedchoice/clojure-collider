@@ -20,13 +20,13 @@
  ;; bites: if ANY app opens the mic endpoint, the headset drops to
  ;; low-quality headset mode and our music endpoint buzzes with it.
  ;;
- ;; SKIP -H when the baseline already shows the AirPods as Output (as it
- ;; does here): steps 3-5 run without -H by default. -H is only for when
- ;; macOS default output is NOT the AirPods - and beware duplicates: if
- ;; two entries share one name (scsynth lists "Robert’s AirPods P" twice,
- ;; entries 0 and 1), -H matches the FIRST, which is the mic endpoint
- ;; with no outputs, and boot fails. Prefer no -H; if you must pin, first
- ;; rename the mic entry in Audio MIDI Setup so the music name is unique.
+ ;; SKIP -H when the baseline already shows the headphones as Output:
+ ;; steps 3-5 run without -H by default. -H is only for when macOS
+ ;; default output is NOT the headphones - and beware duplicates: if two
+ ;; entries share one name, -H matches the FIRST, which may be the mic
+ ;; endpoint with no outputs, and boot fails. Prefer no -H; if you must
+ ;; pin, first rename the mic entry in Audio MIDI Setup so the music
+ ;; name is unique.
  ;; Watch the quote character: macOS names often use a curly ’ (U+2019) -
  ;; copy it, don't retype it as ASCII ', or -H won't match.
  ;;
@@ -46,12 +46,10 @@
              [clojure-collider.synth.sdef :as sdef]
              [ugens :as ug]))
 
- (def default-device "Robert’s AirPods P")
- ;; Placeholder: replace with YOUR 0-in / 2-out music endpoint, copied
- ;; exactly from the device list our boot prints (or Audio MIDI Setup).
- ;; NB: macOS names often use a curly ’ (U+2019) - copy it, don't retype
- ;; it as ASCII ', or -H won't match. Or pass the name per call, e.g.
- ;; (explicit-device "Robert's Airpods Pro 2").
+ ;; No personal device names live here on purpose: every Mac names its
+ ;; Bluetooth endpoints differently, so the music-endpoint name is always
+ ;; passed per call (copy it exactly from your baseline's device list).
+ ;; E.g. (explicit-device "Your Headphones Music Endpoint").
 
 (defn- play-chord!
   "Boot on PORT with OPTS, play a 440/442 chord for SECS, quit. Private."
@@ -74,22 +72,22 @@
   (play-chord! 57170 {} 15))
 
  (defn explicit-device
-   "Step 2 (usually SKIP - see header): pin scsynth at the AirPods MUSIC
-   endpoint with -H. Only useful when macOS default output is NOT already
-   the AirPods. WARNING: with duplicated names -H matches the first entry,
-   the mic endpoint, and boot fails - prefer steps 3-5 without -H, or
-   rename the mic entry in Audio MIDI Setup first.
-   Run: (bluetooth-headphones/explicit-device)
-   Exact name: (bluetooth-headphones/explicit-device \"Robert's Airpods Pro 2\")"
-   [& [device]]
-   (play-chord! 57171 {:device (or device default-device)} 15))
+   "Step 2 (usually SKIP - see header): pin scsynth at the MUSIC endpoint
+   with -H. Only useful when macOS default output is NOT already the
+   headphones. DEVICE is required (no default - every Mac names things
+   differently). WARNING: with duplicated names -H matches the first
+   entry, the mic endpoint, and boot fails - prefer steps 3-5 without
+   -H, or rename the mic entry in Audio MIDI Setup first.
+   Run: (bluetooth-headphones/explicit-device \"Your Headphones Music Endpoint\")"
+   [device]
+   (play-chord! 57171 {:device device} 15))
 
  (defn big-buffer
    "Step 3: a larger hardware buffer (-Z) for Bluetooth jitter. No -H by
-   default: your baseline already shows the AirPods as system output, and
-   -H with a duplicated name (entries 0 and 1 are both \"...AirPods P\")
-   can grab the mic endpoint, which has no outputs. Only pass :device if
-   your default output is NOT the AirPods.
+   default: if the baseline already shows the headphones as system
+   output, -H buys nothing - and with duplicated endpoint names it can
+   grab the mic endpoint, which has no outputs. Only pass :device if
+   your default output is NOT the headphones.
    Run: (bluetooth-headphones/big-buffer)
    Bigger: (bluetooth-headphones/big-buffer :size 2048)
    With device: (bluetooth-headphones/big-buffer :device \"Name\" :size 1024)"
