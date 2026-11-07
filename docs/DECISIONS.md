@@ -7,6 +7,10 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-07 — scheduler error traces + guarded gate-0
+ - `scheduler/run-tasks` printed only `.getMessage` (e.g. a bare NPE "in scheduler thread" with no origin). Now prints exception class + message + thread name + full stack trace. No tests depended on the one-line format.
+ - `backend/play-event`'s scheduled gate-0 could hit an already-freed voice (`FAILURE IN SERVER /n_set Node N not found`, reproduced locally on the first voice). The callback now skips when `server/is-playing?` (node-watcher `/n_end`) is false; a residual check-then-send race stays loud. Verified: jazz re-run shows only the benign `late` line.
+ - Status: decided
  ### 2026-11-07 — output-only scsynth by default (`-i 0`), `:input?` opt-in
  - `options/defaults` sets `:num-input-bus 0`: scsynth opens no input device, so rate-mismatched inputs (Bluetooth headset mics) can't fail boot. No in-repo SoundIn/hardware-input users (only internal-bus `in:ar`), so nothing breaks. Opt in with `{:num-input-bus 8}` at `make-external-server`, or `:input? true` on `setup-performance!`/`connect-server!` (both assoc 8 before boot).
  - Trap found en route: upstream's `:input-stream-enabled`/`:output-stream-enabled` (`-I`/`-O`) are NOT real scsynth flags (verified `scsynth -h`, 3.13.0) — emitting `-I 0` kills boot. The `-i` channel count is the mechanism. Fields stay for upstream parity but must remain nil.

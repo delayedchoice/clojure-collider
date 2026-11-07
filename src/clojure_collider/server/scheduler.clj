@@ -112,14 +112,18 @@
     (reset! (:thread sched) t)
     t))
 
-(defn- run-tasks [events]
-  (reduce (fn [stop? {:keys [task]}]
-            (try (if (= (task) stop-task) true stop?)
-                 (catch Exception e
-                   (binding [*out* *err*]
-                     (println "Error" (.getMessage e) "in scheduler thread"))
-                   stop?)))
-          false events))
+ (defn- run-tasks [events]
+   (reduce (fn [stop? {:keys [task]}]
+             (try (if (= (task) stop-task) true stop?)
+                  (catch Exception e
+                    ;; Full trace, not just the message: a one-line "Error"
+                    ;; is undebuggable (e.g. a bare NPE from a pattern step).
+                    (binding [*out* *err*]
+                      (println "Error" (str (.getName (class e)) ": " (.getMessage e))
+                               "in" (.getName (Thread/currentThread)))
+                      (.printStackTrace ^Throwable e))
+                    stop?)))
+           false events))
 
 ;; -- Scheduler ----------------------------------------------------------------------
 

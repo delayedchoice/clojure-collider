@@ -119,9 +119,14 @@
                         (let [tempo (or (ev/event-value ev :tempo) 1)
                               gate-sec (+ (double beat-sec)
                                           (* (double sus) (/ 1.0 (double tempo))))]
-                          (binding [server/*s* srv]
-                            (server/callback gate-sec
-                                             (fn [] (server/ctrl node :gate 0))))))))
+                           (binding [server/*s* srv]
+                             (server/callback gate-sec
+                               ;; The voice may already be gone (freed envelope,
+                               ;; ended pattern): gate-0 on a dead node is a
+                               ;; server FAILURE line. Skip when /n_end was
+                               ;; seen; a residual check-then-send race stays loud.
+                               (fn [] (when (server/is-playing? node)
+                                        (server/ctrl node :gate 0)))))))))
                   node))]
           (if (= 1 (count voices))
             (start-one (first voices))
