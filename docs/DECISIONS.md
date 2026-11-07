@@ -7,6 +7,9 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-07 — `discreet_music` in Ab major, teropa rhythms
+ - Example `discreet_music.clj` implements the reverbmachine recipe (Synthi voice: sine + touch of saw, pitch-tracking vibrato, dark LPF, slow attack; 160ms Echoplex comb per voice; 5.65s Frippertronics loop w/ feedback + glue compander + room). Key is Ab major per the article (right loop outlines Ab-C-Eb + 6th F; left has the Db-vs-C rub + four-note closing motif); the two published sources disagree on absolute key (teropa's transcription sits in C-ish), so rhythms/loop lengths (68s/74s) follow teropa exactly while pitch classes follow the article. Half-speed lore is baked in - everything runs at final-record speed. NRT-verified peak 0.17, no clipping.
+ - Status: decided
  ### 2026-11-07 — prune dead backends on rig setup (REPL re-run NPE)
  - Re-running a rig twice in one REPL NPEd every pattern step: `start-clock-loop` reuses the existing clock, so the dead first backend (device closed on quit → nil port → `intCast` NPE in `send-bundle`) ran before the live one and the `doseq` never reached it - total silence on run 2+. `prune-dead-backends!` now drops backends whose server has quit in both `setup-performance!` and `connect-server!` (server-less backends like DebugBackend are kept). Regression test `clock-rig-test` boots/quits/reboots and asserts a single backend bound to the live server.
  - Status: decided
