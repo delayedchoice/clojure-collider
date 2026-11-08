@@ -104,8 +104,10 @@
          :loop true]))))
 
 (defn- start-drones! []
+  ;; :out 16 routes the drone through the verb's master fade; without it
+  ;; drones hit hardware directly (abrupt start, hard cut at the end).
   (mapv (fn [m pan] (sdef/synth :thursday-drone :freq (p/midinote-freq m)
-                                :pan pan))
+                                :out 16 :pan pan))
         drone-notes [-0.2 0.0 0.2]))
 
 (defn- play-all! []

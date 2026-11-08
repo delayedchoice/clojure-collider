@@ -8,7 +8,7 @@ _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
  ### 2026-11-08 — `panic!` (immediate all-silence)
- - `p/panic!` now routes through `server/panic-all!`: full panic on every live server, then the kill pair sprayed at every (host,port) ever registered (quit-but-ringing records die too; order matters - spray first, group-1 rebuild last). `server/panic-port!` sends the pair with a throwaway device, no record needed - for a server in another JVM: `(server/panic-port! 57120)`. Live-verified incl. the faked-quit corpse case. Remainder: foreign orphans need `killall scsynth`.
+ - `thursday_afternoon` drones bypassed the master fade (`start-drones!` never passed `:out`, so the G-triad hit hardware at full from t=0 and cut dead at the end - the abrupt ending). Now `:out 16` through `:thursday-verb` like every other voice; 60s NRT window [0 10] RMS 0.18 -> 0.007, tail still lands on digital silence. No gate change: the verb's 10s close masks the hard node-free.
  - Status: decided
  ### 2026-11-07 — `thursday_afternoon` + `music_for_airports` reconstructions
  - `thursday_afternoon.clj`: G dom7 + C (article), voice/detail from pitch-detecting the article's own sample pack (8 DX7 sines G3-D5, 7 piano notes B3-D5, G-triad drone), loop times 16-19.3s with +-0.6s per-repeat jitter (the article's range; exact per-loop times unpublished). DX7 voice = single sine w/ 2.11s decay; piano = additive plink. Amps set by NRT stress (peak 0.28).
