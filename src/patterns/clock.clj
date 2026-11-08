@@ -289,9 +289,11 @@
    No clock or no servers: skips what's absent. Returns nil."
   ([] (panic! *clock*))
   ([clock]
-   (when clock (stop clock :all))
-   (server/panic-all!)
-   nil))
+   (let [n (if clock (count @(:tasks clock)) 0)]
+     (when clock (stop clock :all))
+     (server/panic-all!)
+     (println :panic-tasks-dropped n)
+     nil)))
 
 (defn end
   "End TASK (or tasks playing pdef keyword X): finish the current cycle

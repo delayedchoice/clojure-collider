@@ -8,7 +8,7 @@ _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
  ### 2026-11-08 — `panic!` (immediate all-silence)
- - `p/panic!` routes through `server/panic-all!` (live servers + registry-port spray; order spray-first is now moot). Kill command is `/g_deepFree 0`, not `/g_freeAll`: deepFree kills synths but leaves groups intact, so the group-1 rebuild + /sync is gone. `(server/panic-port! 57120)` for foreign-JVM servers; beyond that `killall scsynth`.
+ - `p/panic!` routes through `server/panic-all!` (live servers + registry-port spray). Kill command is `/g_deepFree 0` (groups survive, no rebuild). `(server/panic-port! 57120)` for foreign-JVM servers; beyond that `killall scsynth`. `server-boot` installs a JVM shutdown hook (`cleanup-server`, spawned servers only) so Ctrl+C no longer orphans ringing scsynths - the likely cause of the "panic not working" reports. `panic!`/`panic-all!` print what they silenced (`:panic-silenced`, `:panic-all`, `:panic-tasks-dropped`); silence in the output means stale code - re-require.
  - Status: decided
  ### 2026-11-07 — `thursday_afternoon` + `music_for_airports` reconstructions
  - `thursday_afternoon.clj`: G dom7 + C (article), voice/detail from pitch-detecting the article's own sample pack (8 DX7 sines G3-D5, 7 piano notes B3-D5, G-triad drone), loop times 16-19.3s with +-0.6s per-repeat jitter (the article's range; exact per-loop times unpublished). DX7 voice = single sine w/ 2.11s decay; piano = additive plink. Amps set by NRT stress (peak 0.28).

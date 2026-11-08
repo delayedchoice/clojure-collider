@@ -496,6 +496,16 @@
   (reset! (:volume server) 0.0)
   (reset! (:volume-control-synth server) nil)
   (doseq [f @boot-hooks] (f))
+  ;; Ctrl+C / System/exit otherwise orphans a ringing scsynth (no language
+  ;; side left to free it). Kill our own spawn on JVM exit; a just-connect?
+  ;; record is foreign - never touch its process. cleanup-server (not a
+  ;; full quit) is idempotent and never blocks the shutdown.
+  (when-not (:just-connect? server)
+    (try (.. Runtime getRuntime
+             (addShutdownHook (Thread. (fn []
+                                        (try (cleanup-server server)
+                                             (catch Throwable _))))))
+         (catch Throwable _)))
   server)
 
 (defn server-quit [server]
@@ -728,6 +738,7 @@
    (sched/tempo-clock-clear @(:tempo-clock server))
    (send-message server "/clearSched")
    (send-message server "/g_deepFree" (int 0))
+   (println :panic-silenced (:name server))
    server))
 
 (defn panic-port!
@@ -752,14 +763,16 @@
    foreign orphans (another machine, an scsynth started outside this
    library) still need `killall scsynth`. Returns nil."
   []
-  (doseq [[host port] (distinct
-                       (keep (fn [{:keys [host port]}]
-                               (when (and host port) [host port]))
-                             @all-servers))]
-    (try (panic-port! port :host host) (catch Exception _)))
-  (doseq [s (filterv live-server? (all-running-servers))]
-    (panic! s))
-  nil)
+  (let [targets (distinct
+                 (keep (fn [{:keys [host port]}]
+                         (when (and host port) [host port]))
+                       @all-servers))
+        live (filterv live-server? (all-running-servers))]
+    (doseq [[host port] targets]
+      (try (panic-port! port :host host) (catch Exception _)))
+    (doseq [s live] (panic! s))
+    (println :panic-all {:live (mapv :name live) :sprayed targets})
+    nil))
 
 (defmacro at
   "Collect body messages into one timestamped bundle (RT sends, NRT collects)."
