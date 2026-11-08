@@ -40,12 +40,12 @@
 
 (defn- define-voices! []
   (sdef/defsynth :thursday-keys
-    [Freq 440
+    [freq 440
      amp 0.05
      gate 1
      out 0
      pan 0.0]
-    (let [f Freq
+    (let [f freq
           src (ops/+ (ug/sin-osc:ar f 0 1.0)
                      (ops/* (ug/sin-osc:ar (ops/* f 2.0) 0 1.0) 0.35)
                      (ops/* (ug/sin-osc:ar (ops/* f 3.0) 0 1.0) 0.15))
@@ -53,7 +53,7 @@
           env (ug/env-gen:kr (ug/env-asr 0.01 1.0 2.0) :gate gate :act :free)]
       (ug/out:ar out (ug/pan2:ar (ops/* dark env amp) pan 1.0))))
   (sdef/defsynth :thursday-sine
-    [Freq 440
+    [freq 440
      amp 0.045
      gate 1
      out 0
@@ -61,19 +61,19 @@
     ;; DX7 single sine: 2.11s decay to -18dB-ish, then a short tail.
     (let [env (ug/env-gen:kr (ug/env [0.0 1.0 0.13 0.0] [0.01 2.11 3.0])
                              :act :free)
-          sig (ug/sin-osc:ar Freq 0 1.0)]
+          sig (ug/sin-osc:ar freq 0 1.0)]
       (ug/out:ar out (ug/pan2:ar (ops/* sig env amp) pan 1.0))))
   (sdef/defsynth :thursday-drone
-    [Freq 110
+    [freq 110
      amp 0.025
      gate 1
      out 0
      pan 0.0]
     (let [wob (ug/sin-osc:kr 0.07 0 1.0)
           trem (ops/+ 1.0 (ops/* 0.2 wob))
-          src (ops/+ (ug/sin-osc:ar Freq 0 1.0)
-                     (ug/sin-osc:ar (ops/* Freq 1.002) 0 1.0)
-                     (ops/* (ug/sin-osc:ar (ops/* Freq 2.003) 0 1.0) 0.4))
+          src (ops/+ (ug/sin-osc:ar freq 0 1.0)
+                     (ug/sin-osc:ar (ops/* freq 1.002) 0 1.0)
+                     (ops/* (ug/sin-osc:ar (ops/* freq 2.003) 0 1.0) 0.4))
           dark (ug/lpf:ar src 380.0 1.0 0.0)
           env (ug/env-gen:kr (ug/env-asr 2.0 1.0 8.0) :gate gate :act :free)]
       (ug/out:ar out (ug/pan2:ar (ops/* dark env trem amp) pan 1.0))))

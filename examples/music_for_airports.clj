@@ -43,25 +43,25 @@
 
 (defn- define-voices! []
   (sdef/defsynth :air-choir
-    [Freq 440
+    [freq 440
      amp 0.05
      gate 1
      out 0
      pan 0.0]
     (let [vib (ug/sin-osc:kr 0.4 0 1.0)
-          f (ops/* Freq (ops/+ 1.0 (ops/* 0.003 vib)))
+          f (ops/* freq (ops/+ 1.0 (ops/* 0.003 vib)))
           src (ops/+ (ug/sin-osc:ar f 0 1.0)
                      (ops/* (ug/sin-osc:ar (ops/* f 2.0) 0 1.0) 0.3)
                      (ops/* (ug/sin-osc:ar (ops/* f 3.0) 0 1.0) 0.12))
           env (ug/env-gen:kr (ug/env-asr 1.5 1.0 3.0) :gate gate :act :free)]
       (ug/out:ar out (ug/pan2:ar (ops/* src env amp) pan 1.0))))
   (sdef/defsynth :air-keys
-    [Freq 440
+    [freq 440
      amp 0.055
      gate 1
      out 0
      pan 0.0]
-    (let [f Freq
+    (let [f freq
           src (ops/+ (ug/sin-osc:ar f 0 1.0)
                      (ops/* (ug/sin-osc:ar (ops/* f 2.0) 0 1.0) 0.35)
                      (ops/* (ug/sin-osc:ar (ops/* f 3.0) 0 1.0) 0.15))
