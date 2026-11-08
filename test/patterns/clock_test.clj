@@ -67,6 +67,20 @@
       (c/stop clock)
       (is (= [] @(:tasks clock))))))
 
+(deftest stopped-tasks-drop-queued-steps
+  (let [clock (c/make-clock nil)
+        db (b/make-debug-backend)
+        _ (c/enable-backend! clock db)
+        t (c/play clock (pb/pbind :note 60 :dur 1))
+        step! @#'c/step-task!]
+    (testing "a queued step plays while its task is on the clock"
+      (step! clock t)
+      (is (= 1 (count (b/captured-events db)))))
+    (testing "steps queued before stop :all are dropped, not played"
+      (c/stop clock :all)
+      (step! clock t)
+      (is (= 1 (count (b/captured-events db)))))))
+
  (deftest keyword-play-stop-via-pdef
    (let [k ::clock-test-pat]
      (pb/pdef k (pb/pbind :note 60 :dur 1))

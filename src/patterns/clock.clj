@@ -176,12 +176,16 @@
 (defn- step-task!
   "Run one step of TASK on CLOCK: pull pnext!, play events, reschedule.
    Eop drops the task, restarting its stream first when looping (an
-   immediately re-ending source is dropped after 64 chained restarts)."
+   immediately re-ending source is dropped after 64 chained restarts).
+   Steps whose task is no longer on the clock (stop/remove while a
+   tempo-clock callback was already queued) are dropped silently: stop
+   only clears the task list, it cannot unqueue the pending callback."
   ([clock task] (step-task! clock task 0))
   ([clock task depth]
-   (if (> depth 64)
-     (remove-task! clock task)
-     (step-body! clock task depth))))
+   (when (some #(= (:id %) (:id task)) @(:tasks clock))
+     (if (> depth 64)
+       (remove-task! clock task)
+      (step-body! clock task depth)))))
 
 (defn- step-body!
   "Single pull/play/reschedule step (split for the depth guard above)."
