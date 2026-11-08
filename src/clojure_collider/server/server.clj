@@ -689,14 +689,29 @@
    (doseq [hook @stop-hooks] (hook))
    *s*))
 
+(defn- sole-running-server
+  "The single booted server, nil when none. Throws when several run and
+   *s* is unbound - there is no way to know which one is sounding."
+  []
+  (let [rs (all-running-servers)]
+    (cond (= 1 (count rs)) (first rs)
+          (> (count rs) 1)
+          (throw (ex-info "panic!: several servers running, bind server/*s*"
+                          {:running (mapv :name rs)}))
+          :else nil)))
+
 (defn panic!
   "Cut all sound immediately. Clears pending language-side scheduler and
    tempo-clock callbacks, sends /clearSched (drops future-timetag bundles
    already on scsynth) and /g_freeAll 0 (frees every node in every group,
    including the default group itself), then recreates default group 1
    like server-free-all so later synths have a live target.
-   Tails do not ring out. Returns the server."
-  ([] (panic! *s*))
+   Tails do not ring out. With no server argument, uses *s* when booted,
+   else the sole running server (nil when none is running - a no-op).
+   Returns the server (nil when there was nothing to silence)."
+  ([] (when-let [s (or (when (and *s* (boot? *s*)) *s*)
+                       (sole-running-server))]
+        (panic! s)))
   ([server]
    (sched/sched-clear @(:scheduler server))
    (sched/tempo-clock-clear @(:tempo-clock server))

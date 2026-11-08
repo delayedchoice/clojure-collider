@@ -287,13 +287,13 @@
 (defn panic!
   "Stop everything immediately: drop all clock tasks (no new notes), then
    server/panic! to cut every sounding node on scsynth (no ringing tails).
-   Safe with no clock or no/unbooted server (skips what's absent).
-   Returns nil."
+   The server is *s* when booted, else the sole running server - so this
+   works at the REPL after the performance binding has exited. No clock
+   or no running server: skips what's absent. Returns nil."
   ([] (panic! *clock*))
   ([clock]
    (when clock (stop clock :all))
-   (when (and server/*s* (server/boot? server/*s*))
-     (server/panic!))
+   (server/panic!)
    nil))
 
 (defn end

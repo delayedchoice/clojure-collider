@@ -84,3 +84,18 @@
           (when (server/boot? s)
             (server/server-quit s))
           (is (false? (server/boot? s))))))))
+
+(deftest panic-server-discovery
+  (let [fake #(server/map->ExternalServer {:name % :boot? (atom true)})
+        a (fake "panic-a") b (fake "panic-b")
+        registry @#'server/all-servers
+        prev @registry]
+    (try
+      (testing "several running servers + unbound *s* -> loud ambiguity"
+        (reset! registry [a b])
+        (is (thrown? clojure.lang.ExceptionInfo (server/panic!))))
+      (testing "no running servers -> silent no-op"
+        (reset! registry [])
+        (is (nil? (server/panic!))))
+      (finally
+        (reset! registry prev)))))

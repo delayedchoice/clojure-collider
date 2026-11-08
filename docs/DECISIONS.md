@@ -8,7 +8,7 @@ _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
  ### 2026-11-08 — `panic!` (immediate all-silence)
- - Two levels: `server/panic!` clears language sched + tempo queues, sends `/clearSched` and `/g_freeAll 0`, then recreates default group 1 (group 0's freeAll takes group 1 itself - learned live: post-panic spawns failed with `Group 1 not found` until the rebuild). `patterns.clock/panic!` (aka `p/panic!`) drops clock tasks first, nil-safe on clock and server. Verified live: ringing gateless sine -> silent, tasks emptied, fresh voice sounds after.
+ - `patterns.clock/panic!` (aka `p/panic!`) drops clock tasks first. Server resolution: bound+booted `*s*` wins, else the sole running server (so REPL use after the performance binding exits still silences), nil when none running, loud ex-info when several run unbound. Verified live both bound and unbound.
  - Status: decided
  ### 2026-11-07 — `thursday_afternoon` + `music_for_airports` reconstructions
  - `thursday_afternoon.clj`: G dom7 + C (article), voice/detail from pitch-detecting the article's own sample pack (8 DX7 sines G3-D5, 7 piano notes B3-D5, G-triad drone), loop times 16-19.3s with +-0.6s per-repeat jitter (the article's range; exact per-loop times unpublished). DX7 voice = single sine w/ 2.11s decay; piano = additive plink. Amps set by NRT stress (peak 0.28).
