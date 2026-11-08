@@ -7,6 +7,9 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-08 — `panic!` (immediate all-silence)
+ - Two levels: `server/panic!` clears language sched + tempo queues, sends `/clearSched` and `/g_freeAll 0`, then recreates default group 1 (group 0's freeAll takes group 1 itself - learned live: post-panic spawns failed with `Group 1 not found` until the rebuild). `patterns.clock/panic!` (aka `p/panic!`) drops clock tasks first, nil-safe on clock and server. Verified live: ringing gateless sine -> silent, tasks emptied, fresh voice sounds after.
+ - Status: decided
  ### 2026-11-07 — `thursday_afternoon` + `music_for_airports` reconstructions
  - `thursday_afternoon.clj`: G dom7 + C (article), voice/detail from pitch-detecting the article's own sample pack (8 DX7 sines G3-D5, 7 piano notes B3-D5, G-triad drone), loop times 16-19.3s with +-0.6s per-repeat jitter (the article's range; exact per-loop times unpublished). DX7 voice = single sine w/ 2.11s decay; piano = additive plink. Amps set by NRT stress (peak 0.28).
  - `music_for_airports.clj` (tracks `2/1`, `1/2`; `1/1` omitted - no reliable note data): `2/1` = 7 sung loops (Ab4 F4 C4 Eb4 Db4 Ab3 F3, pitch-detected from the article's Choir loops; times from teropa's independent reconstruction, whose octave choices differ - documented in-file), choir voice = layered sines + slow attack; `1/2` = 8 piano phrases from onset-segmented pitch detection of the article's Piano loops (D major w/ C naturals, Mixolydian colour as the article says). Peaks 0.40/0.48, no clipping.

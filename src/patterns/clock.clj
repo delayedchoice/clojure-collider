@@ -284,6 +284,18 @@
      :else
      (remove-task! clock x))))
 
+(defn panic!
+  "Stop everything immediately: drop all clock tasks (no new notes), then
+   server/panic! to cut every sounding node on scsynth (no ringing tails).
+   Safe with no clock or no/unbooted server (skips what's absent).
+   Returns nil."
+  ([] (panic! *clock*))
+  ([clock]
+   (when clock (stop clock :all))
+   (when (and server/*s* (server/boot? server/*s*))
+     (server/panic!))
+   nil))
+
 (defn end
   "End TASK (or tasks playing pdef keyword X): finish the current cycle
    without looping (sets loop? false). Returns the updated task, or nil."

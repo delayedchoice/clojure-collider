@@ -689,6 +689,23 @@
    (doseq [hook @stop-hooks] (hook))
    *s*))
 
+(defn panic!
+  "Cut all sound immediately. Clears pending language-side scheduler and
+   tempo-clock callbacks, sends /clearSched (drops future-timetag bundles
+   already on scsynth) and /g_freeAll 0 (frees every node in every group,
+   including the default group itself), then recreates default group 1
+   like server-free-all so later synths have a live target.
+   Tails do not ring out. Returns the server."
+  ([] (panic! *s*))
+  ([server]
+   (sched/sched-clear @(:scheduler server))
+   (sched/tempo-clock-clear @(:tempo-clock server))
+   (send-message server "/clearSched")
+   (send-message server "/g_freeAll" (int 0))
+   (binding [*s* server]
+     (reset! (:default-group server) (make-group :id 1 :pos :head :to 0)))
+   server))
+
 (defmacro at
   "Collect body messages into one timestamped bundle (RT sends, NRT collects)."
   [time & body]

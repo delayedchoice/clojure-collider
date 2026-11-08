@@ -81,6 +81,16 @@
       (step! clock t)
       (is (= 1 (count (b/captured-events db)))))))
 
+(deftest panic-drops-tasks-without-server
+  (let [clock (c/make-clock nil)
+        db (b/make-debug-backend)
+        _ (c/enable-backend! clock db)
+        t (c/play clock (pb/pbind :note 60 :dur 1))]
+    (testing "panic! clears tasks and returns nil (no server bound)"
+      (is (nil? (c/panic! clock)))
+      (is (= [] @(:tasks clock)))
+      (is (not (c/playing-p clock t))))))
+
  (deftest keyword-play-stop-via-pdef
    (let [k ::clock-test-pat]
      (pb/pdef k (pb/pbind :note 60 :dur 1))
