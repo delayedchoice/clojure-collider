@@ -1,5 +1,6 @@
 (ns clojure-collider.server.server-test
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure-collider.osc.encode :as enc]
             [clojure-collider.server.options :as opts]
             [clojure-collider.server.server :as server]))
 
@@ -100,3 +101,42 @@
         (is (nil? (server/panic!))))
       (finally
         (reset! registry prev)))))
+
+(defn- udp-listener
+  "Ephemeral localhost socket + one-shot byte receiver. Returns
+   {:port p :recv (fn [] bytes)}; caller closes :socket."
+  []
+  (let [sock (java.net.DatagramSocket. 0)]
+    (.setSoTimeout sock 2000)
+    {:socket sock
+     :port (.getLocalPort sock)
+     :recv (fn []
+              (let [buf (byte-array 65535)
+                    pkt (java.net.DatagramPacket. buf (alength buf))]
+                (.receive sock pkt)
+                (vec (java.util.Arrays/copyOfRange
+                      buf 0 (.getLength pkt)))))}))
+
+(deftest panic-port-sends-kill-pair
+  (let [{:keys [socket port recv]} (udp-listener)]
+    (try
+      (testing "no server record needed, kill pair hits the wire in order"
+        (is (nil? (server/panic-port! port)))
+        (is (= (vec (enc/encode-message "/clearSched")) (recv)))
+        (is (= (vec (enc/encode-message "/g_freeAll" (int 0))) (recv))))
+      (finally (.close socket)))))
+
+(deftest panic-all-sweeps-quit-records
+  (let [{:keys [socket port recv]} (udp-listener)
+        registry @#'server/all-servers
+        prev @registry]
+    (try
+      (testing "quit record (no device, not booted) still gets sprayed"
+        (reset! registry [{:name "corpse" :host "127.0.0.1" :port port
+                           :boot? (atom false)}])
+        (is (nil? (server/panic-all!)))
+        (is (= (vec (enc/encode-message "/clearSched")) (recv)))
+        (is (= (vec (enc/encode-message "/g_freeAll" (int 0))) (recv))))
+      (finally
+        (reset! registry prev)
+        (.close socket)))))

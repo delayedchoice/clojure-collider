@@ -282,14 +282,15 @@
 
 (defn panic!
   "Stop everything immediately: drop all clock tasks (no new notes), then
-   server/panic! to cut every sounding node on scsynth (no ringing tails).
-   The server is *s* when booted, else the sole running server - so this
-   works at the REPL after the performance binding has exited. No clock
-   or no running server: skips what's absent. Returns nil."
+   server/panic-all! - full panic on every live server plus the panic
+   pair sprayed at every (host,port) this process ever registered, so
+   quit-but-ringing records die too. Cross-process orphans (another REPL
+   JVM, a hand-started scsynth) are out of reach: `killall scsynth`.
+   No clock or no servers: skips what's absent. Returns nil."
   ([] (panic! *clock*))
   ([clock]
    (when clock (stop clock :all))
-   (server/panic!)
+   (server/panic-all!)
    nil))
 
 (defn end

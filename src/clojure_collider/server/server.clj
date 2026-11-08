@@ -732,6 +732,39 @@
      (reset! (:default-group server) (make-group :id 1 :pos :head :to 0)))
    server))
 
+(defn panic-port!
+  "Send /clearSched + /g_freeAll 0 to HOST:PORT with a throwaway device -
+   no server record needed. For silencing a server this process doesn't
+   track (different JVM, stale REPL state, quit record whose scsynth
+   outlived it). Returns nil."
+  [port & {:keys [host] :or {host "127.0.0.1"}}]
+  (let [dev (tx/osc-device host (int port) :local-port nil)]
+    (try
+      (tx/send-message dev "/clearSched")
+      (tx/send-message dev "/g_freeAll" (int 0))
+      (finally (tx/close-device dev)))
+    nil))
+
+(defn panic-all!
+  "Strongest silence this process can manage: the panic pair sprayed at
+   every (host,port) ever registered here - catching quit-but-ringing
+   records the live filter skips - then full panic! on every live server
+   (clears queues, frees nodes, recreates group 1 last, since the spray
+   re-frees it). Never throws (each spray is guarded). Truly foreign
+   orphans (another machine, an scsynth started outside this library)
+   still need `killall scsynth`. Returns nil."
+  []
+  ;; Spray first: it re-frees group 1 everywhere, and each live panic!
+  ;; below ends by recreating group 1 - so the rebuild must come last.
+  (doseq [[host port] (distinct
+                       (keep (fn [{:keys [host port]}]
+                               (when (and host port) [host port]))
+                             @all-servers))]
+    (try (panic-port! port :host host) (catch Exception _)))
+  (doseq [s (filterv live-server? (all-running-servers))]
+    (panic! s))
+  nil)
+
 (defmacro at
   "Collect body messages into one timestamped bundle (RT sends, NRT collects)."
   [time & body]
