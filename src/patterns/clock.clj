@@ -60,15 +60,11 @@
    device-less server). Backends without a :server (e.g. DebugBackend)
    are kept."
    [clock]
-   (swap! (:enabled-backends clock)
+  (swap! (:enabled-backends clock)
           (fn [bs] (filterv (fn [b] (let [s (:server b)]
-                                      (or (nil? s)
-                                          (and (server/boot? s)
-                                               (let [dev @(:device s)]
-                                                 (and (some? dev)
-                                                      (= :running @(:status dev))))))))
+                                      (or (nil? s) (server/live-server? s))))
                             bs)))
-   clock)
+  clock)
 
 (defn disable-backend!
   "Remove backend B from clock's enabled backends. Returns B."

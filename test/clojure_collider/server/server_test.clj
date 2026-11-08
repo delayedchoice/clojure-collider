@@ -86,7 +86,8 @@
           (is (false? (server/boot? s))))))))
 
 (deftest panic-server-discovery
-  (let [fake #(server/map->ExternalServer {:name % :boot? (atom true)})
+  (let [fake #(server/map->ExternalServer {:name % :boot? (atom true)
+                                           :device (atom {:status (atom :running)})})
         a (fake "panic-a") b (fake "panic-b")
         registry @#'server/all-servers
         prev @registry]

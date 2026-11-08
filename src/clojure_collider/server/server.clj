@@ -689,11 +689,22 @@
    (doseq [hook @stop-hooks] (hook))
    *s*))
 
+(defn live-server?
+  "True when S is a booted external server with a live OSC device.
+   Guards against lost-/quit-reply corpses (boot? stuck true, device
+   closed) and NRT score-collectors (no sound to cut)."
+  [s]
+  (and (instance? ExternalServer s)
+       (boolean (when-let [b (:boot? s)] @b))
+       (let [dev (when-let [d (:device s)] @d)]
+         (and (some? dev) (= :running @(:status dev))))))
+
 (defn- sole-running-server
-  "The single booted server, nil when none. Throws when several run and
-   *s* is unbound - there is no way to know which one is sounding."
+  "The single live server, nil when none. Throws when several live
+   servers run and *s* is unbound - there is no way to know which one
+   is sounding."
   []
-  (let [rs (all-running-servers)]
+  (let [rs (filterv live-server? (all-running-servers))]
     (cond (= 1 (count rs)) (first rs)
           (> (count rs) 1)
           (throw (ex-info "panic!: several servers running, bind server/*s*"
