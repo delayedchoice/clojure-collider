@@ -123,7 +123,7 @@
       (testing "no server record needed, kill pair hits the wire in order"
         (is (nil? (server/panic-port! port)))
         (is (= (vec (enc/encode-message "/clearSched")) (recv)))
-        (is (= (vec (enc/encode-message "/g_freeAll" (int 0))) (recv))))
+        (is (= (vec (enc/encode-message "/g_deepFree" (int 0))) (recv))))
       (finally (.close socket)))))
 
 (deftest panic-all-sweeps-quit-records
@@ -136,7 +136,7 @@
                            :boot? (atom false)}])
         (is (nil? (server/panic-all!)))
         (is (= (vec (enc/encode-message "/clearSched")) (recv)))
-        (is (= (vec (enc/encode-message "/g_freeAll" (int 0))) (recv))))
+        (is (= (vec (enc/encode-message "/g_deepFree" (int 0))) (recv))))
       (finally
         (reset! registry prev)
         (.close socket)))))

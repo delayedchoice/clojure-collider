@@ -714,11 +714,11 @@
 (defn panic!
   "Cut all sound immediately. Clears pending language-side scheduler and
    tempo-clock callbacks, sends /clearSched (drops future-timetag bundles
-   already on scsynth) and /g_freeAll 0 (frees every node in every group,
-   including the default group itself), then recreates default group 1
-   like server-free-all so later synths have a live target.
-   Tails do not ring out. With no server argument, uses *s* when booted,
-   else the sole running server (nil when none is running - a no-op).
+   already on scsynth) and /g_deepFree 0 (frees every synth under root,
+   groups left intact - so no group rebuild is needed, unlike /g_freeAll
+   which takes group 1 itself). Tails do not ring out.
+   With no server argument, uses *s* when booted, else the sole running
+   server (nil when none is running - a no-op).
    Returns the server (nil when there was nothing to silence)."
   ([] (when-let [s (or (when (and *s* (boot? *s*)) *s*)
                        (sole-running-server))]
@@ -727,13 +727,11 @@
    (sched/sched-clear @(:scheduler server))
    (sched/tempo-clock-clear @(:tempo-clock server))
    (send-message server "/clearSched")
-   (send-message server "/g_freeAll" (int 0))
-   (binding [*s* server]
-     (reset! (:default-group server) (make-group :id 1 :pos :head :to 0)))
+   (send-message server "/g_deepFree" (int 0))
    server))
 
 (defn panic-port!
-  "Send /clearSched + /g_freeAll 0 to HOST:PORT with a throwaway device -
+  "Send /clearSched + /g_deepFree 0 to HOST:PORT with a throwaway device -
    no server record needed. For silencing a server this process doesn't
    track (different JVM, stale REPL state, quit record whose scsynth
    outlived it). Returns nil."
@@ -741,7 +739,7 @@
   (let [dev (tx/osc-device host (int port) :local-port nil)]
     (try
       (tx/send-message dev "/clearSched")
-      (tx/send-message dev "/g_freeAll" (int 0))
+      (tx/send-message dev "/g_deepFree" (int 0))
       (finally (tx/close-device dev)))
     nil))
 
@@ -749,13 +747,11 @@
   "Strongest silence this process can manage: the panic pair sprayed at
    every (host,port) ever registered here - catching quit-but-ringing
    records the live filter skips - then full panic! on every live server
-   (clears queues, frees nodes, recreates group 1 last, since the spray
-   re-frees it). Never throws (each spray is guarded). Truly foreign
-   orphans (another machine, an scsynth started outside this library)
-   still need `killall scsynth`. Returns nil."
+   (clears queues, frees synths; groups survive /g_deepFree so no
+   rebuild is needed). Never throws (each spray is guarded). Truly
+   foreign orphans (another machine, an scsynth started outside this
+   library) still need `killall scsynth`. Returns nil."
   []
-  ;; Spray first: it re-frees group 1 everywhere, and each live panic!
-  ;; below ends by recreating group 1 - so the rebuild must come last.
   (doseq [[host port] (distinct
                        (keep (fn [{:keys [host port]}]
                                (when (and host port) [host port]))
