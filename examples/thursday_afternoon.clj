@@ -1,6 +1,8 @@
 ;; Thursday Afternoon (Brian Eno, 1985) homage: ~16 incommensurable loops
 ;; over a G-triard drone. Run: clojure -M -m thursday-afternoon [seconds=300]
 ;; Bounce: clojure -M -m thursday-afternoon bounce [seconds] [out.aiff]
+;; Silence: clojure -M -m thursday-afternoon silence (kills every local
+;; scsynth, no REPL state needed - for when stop/panic can't reach it)
 ;;
 ;; After https://reverbmachine.com/blog/deconstructing-brian-eno-thursday-afternoon/
 ;; Harmonically everything belongs to a G dominant 7th (G B D F) with an
@@ -156,9 +158,21 @@
           (server/node-free verb)
           (doseq [d drones] (server/node-free d)))))))
 
+(defn silence []
+  ;; Find every live scsynth on this machine and silence it. No bindings
+  ;; or registry needed - works from a bare process when stop/panic in
+  ;; another JVM can't reach the sound.
+  (let [live (server/find-live-servers)]
+    (println :live-servers live)
+    (doseq [p live] (server/panic-port! p))
+    (println :silenced live)))
+
 (defn -main [& args]
-  (if (= "bounce" (first args))
-    (let [[_ secs-arg out] args
-          secs (if secs-arg (Long/parseLong secs-arg) 300)]
-      (println :rendered (bounce secs (or out "/tmp/thursday.aiff"))))
-    (live-main (if-let [secs-arg (first args)] (Long/parseLong secs-arg) 300))))
+  (cond (= "bounce" (first args))
+        (let [[_ secs-arg out] args
+              secs (if secs-arg (Long/parseLong secs-arg) 300)]
+          (println :rendered (bounce secs (or out "/tmp/thursday.aiff"))))
+        (= "silence" (first args))
+        (silence)
+        :else
+        (live-main (if-let [secs-arg (first args)] (Long/parseLong secs-arg) 300))))

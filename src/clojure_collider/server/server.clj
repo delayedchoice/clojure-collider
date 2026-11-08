@@ -16,7 +16,7 @@
             [clojure-collider.server.scheduler :as sched])
   (:import [java.util.concurrent ConcurrentHashMap CompletableFuture TimeUnit ConcurrentLinkedQueue]
            [java.util.concurrent.locks ReentrantLock]
-           [java.net DatagramSocket]))
+           [java.net DatagramSocket DatagramPacket InetAddress]))
 (declare server-free-all make-group send-bundle)
 
 ;; -- dynamics ------------------------------------------------------------
@@ -740,6 +740,31 @@
    (send-message server "/g_deepFree" (int 0))
    (println :panic-silenced (:name server))
    server))
+
+(defn find-live-servers
+  "Probe localhost UDP PORTS for scsynth /status replies. Needs no record,
+   binding, or registry - finds servers from any process. Returns the
+   responding ports (usually one). A replying non-SC service is harmless:
+   the panic pair is meaningless to it."
+  [& {:keys [ports] :or {ports (concat (range 57100 57201) [57711])}}]
+  (let [sock (DatagramSocket.)
+        localhost (InetAddress/getByName "127.0.0.1")]
+    (.setSoTimeout sock 150)
+    (try
+      (filterv (fn [port]
+                 (try
+                   (let [data (enc/encode-message "/status")
+                         pkt (DatagramPacket. data (alength data)
+                                              localhost (int port))]
+                     (.send sock pkt)
+                     (let [buf (byte-array 65535)
+                           rp (DatagramPacket. buf (alength buf))]
+                       (.receive sock rp)
+                       (= port (.getPort rp))))
+                   (catch java.net.SocketTimeoutException _ false)
+                   (catch Exception _ false)))
+               ports)
+      (finally (.close sock)))))
 
 (defn panic-port!
   "Send /clearSched + /g_deepFree 0 to HOST:PORT with a throwaway device -
