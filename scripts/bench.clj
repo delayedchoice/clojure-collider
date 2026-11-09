@@ -1,20 +1,18 @@
-(require '[clojure-collider.synth.ugen :as ugen]
-         '[clojure-collider.synth.synthdef :as synthdef]
+(require          '[clojure-collider.synth.synthdef :as synthdef]
          '[clojure-collider.ugens.osc :as osc]
          '[clojure-collider.ugens.in-out :as io]
          '[clojure-collider.server.scheduler :as sched])
 ;; -- topo micro-benchmark: N-unit chains ---------------------------------------
 (doseq [n [10 100 500]]
-  (let [sd (synthdef/make-synthdef "bench")]
-    (binding [ugen/*synthdef* sd]
-      (io/out:ar 0 (reduce (fn [sig _] (osc/sin-osc:ar sig 0 1 0))
-                           (osc/sin-osc:ar 440 0 1 0)
-                           (range n))))
-    (let [t0 (System/nanoTime)
-          _ (synthdef/build-synthdef sd)
-          dt (/ (- (System/nanoTime) t0) 1e6)
-          bytes (count (synthdef/encode-synthdef sd))]
-      (println :topo :units (inc n) :ms (format "%.2f" dt) :bytes bytes))))
+  (let [sd (synthdef/make-synthdef "bench")
+        root (io/out:ar 0 (reduce (fn [sig _] (osc/sin-osc:ar sig 0 1 0))
+                                  (osc/sin-osc:ar 440 0 1 0)
+                                  (range n)))
+        t0 (System/nanoTime)
+        _ (synthdef/build-synthdef sd root)
+        dt (/ (- (System/nanoTime) t0) 1e6)
+        bytes (count (synthdef/encode-synthdef sd))]
+    (println :topo :units (inc n) :ms (format "%.2f" dt) :bytes bytes)))
 ;; -- scheduler jitter: 100 callbacks, 10ms grid --------------------------------
 (let [s (sched/make-scheduler "bench" nil)
       errs (atom [])

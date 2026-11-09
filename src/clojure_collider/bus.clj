@@ -2,7 +2,7 @@
   "Audio/control bus allocation. Mirrors bus.lisp.
    Server is duck-typed (needs :lock, :audio-buses, :control-buses atoms)
    so this ns never requires server.clj (no cycle). Unlike upstream, server
-   is always explicit — no *s* default here (server.clj callers pass it).
+   is always explicit (server.clj callers pass it).
    floatfy stays numeric-only (synth.ugen); coerce buses via :busnum."
   (:import [java.util.concurrent.locks ReentrantLock]))
 
@@ -62,8 +62,8 @@
   (bus-alloc :control server :chanls chanls :busnum busnum))
 
 (defn bus-free
-  [bus & [server]]
-  (let [server (or server (:server bus))
+  [bus]
+  (let [server (:server bus)
         v (bus-vec server (:type bus))]
     (with-server-lock server
       (reset! v (reduce (fn [b i] (assoc b i nil))

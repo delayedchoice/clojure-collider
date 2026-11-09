@@ -39,27 +39,26 @@
     ;; or kill scsynth (private), or client slots leak server-side.
     (when probe
       (try
-        (binding [server/*s* probe]
-          (testing "sync + status"
-            (is (= probe (server/sync probe)))
-            (is (do (server/server-status probe) true)))
-          (testing "groups"
-            (let [g (server/make-group :server probe)]
-              (is (pos? (:id g)))
-              ;; /n_go arrives async after /sync completes; poll for it
-              (is (loop [i 0]
-                    (cond (server/is-playing? g) true
-                          (> i 100) false
-                          :else (do (Thread/sleep 20) (recur (inc i))))))
-              (server/group-free-all g)
-              (server/node-free g)))
-          (testing "control set/get"
-            (server/control-set probe 0 0.5)
-            (is (= 0.5 (server/control-get probe 0))))
-          (testing "callback fires"
-            (let [p (promise)]
-              (server/callback (+ (server/now) 0.1) (fn [] (deliver p :cb)))
-              (is (= :cb (deref p 3000 :timeout))))))
+        (testing "sync + status"
+          (is (= probe (server/sync probe)))
+          (is (do (server/server-status probe) true)))
+        (testing "groups"
+          (let [g (server/make-group :server probe)]
+            (is (pos? (:id g)))
+            ;; /n_go arrives async after /sync completes; poll for it
+            (is (loop [i 0]
+                  (cond (server/is-playing? g) true
+                        (> i 100) false
+                        :else (do (Thread/sleep 20) (recur (inc i))))))
+            (server/group-free-all g)
+            (server/node-free g)))
+        (testing "control set/get"
+          (server/control-set probe 0 0.5)
+          (is (= 0.5 (server/control-get probe 0))))
+        (testing "callback fires"
+          (let [p (promise)]
+            (server/callback probe (+ (server/now probe) 0.1) (fn [] (deliver p :cb)))
+            (is (= :cb (deref p 3000 :timeout)))))
         (finally
           (when (server/boot? probe)
             (server/server-quit probe))
@@ -93,15 +92,17 @@
         registry @#'server/all-servers
         prev @registry]
     (try
-      (testing "several running servers + unbound *s* -> loud ambiguity"
+      (testing "several live servers -> nil (non-throwing)"
         (reset! registry [a b])
-        (is (thrown? clojure.lang.ExceptionInfo (server/panic!))))
-      (testing "no running servers -> silent no-op"
+        (is (nil? (server/sole-live-server))))
+      (testing "exactly one live server -> that server"
+        (reset! registry [a])
+        (is (= a (server/sole-live-server))))
+      (testing "no running servers -> nil"
         (reset! registry [])
-        (is (nil? (server/panic!))))
+        (is (nil? (server/sole-live-server))))
       (finally
         (reset! registry prev)))))
-
 (defn- udp-listener
   "Ephemeral localhost socket + one-shot byte receiver. Returns
    {:port p :recv (fn [] bytes)}; caller closes :socket."

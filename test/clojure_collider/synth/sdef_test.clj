@@ -2,7 +2,6 @@
   "defsynth/synth/play: metadata, macro parity, live fire."
   (:require [clojure.test :refer [deftest is testing]]
             [clojure-collider.synth.sdef :as sdef]
-            [clojure-collider.synth.ugen :as ugen]
             [clojure-collider.synth.control :as ctl]
             [clojure-collider.synth.synthdef :as synthdef]
             [clojure-collider.ugens.osc :as osc]
@@ -10,37 +9,37 @@
             [clojure-collider.server.server :as server]))
 
 (deftest defsynth-metadata
-  (sdef/defsynth md-probe [freq 440 amp 0.5] (io/out:ar 0 (osc/sin-osc:ar freq 0 1 amp)))
+  (sdef/defsynth nil md-probe [freq 440 amp 0.5] (io/out:ar 0 (osc/sin-osc:ar freq 0 1 amp)))
   (is (= 'md-probe (sdef/synthdef-metadata 'md-probe :name)))
   (is (= [['freq 440] ['amp 0.5]] (sdef/synthdef-metadata 'md-probe :controls)))
   (is (= 1 (count (sdef/synthdef-metadata 'md-probe :body)))))
 
 (deftest defsynth-keyword-name
   (testing "keyword names normalize (no colon) so synth finds the def"
-    (let [sd (sdef/defsynth :kw-probe [freq 440]
+    (let [sd (sdef/defsynth nil :kw-probe [freq 440]
                (io/out:ar 0 (osc/sin-osc:ar freq)))]
       (is (= "kw-probe" (:name @sd))))))
 
 (deftest defsynth-macro-parity
   ;; the macro must add no junk vs the manual graph
   (testing "vector params"
-    (let [via-macro (sdef/defsynth parity-v [freq 440]
+    (let [via-macro (sdef/defsynth nil parity-v [freq 440]
                       (io/out:ar 0 (osc/sin-osc:ar freq)))
-          manual (let [m (synthdef/make-synthdef "parity-v")]
-                   (binding [ugen/*synthdef* m]
-                     (ctl/with-controls [freq 440]
-                       (io/out:ar 0 (osc/sin-osc:ar freq)))
-                     (synthdef/build-synthdef m) m))]
+          manual (let [m (synthdef/make-synthdef "parity-v")
+                       root (ctl/with-controls m [freq 440]
+                              (io/out:ar 0 (osc/sin-osc:ar freq)))]
+                   (synthdef/build-synthdef m root)
+                   m)]
       (is (java.util.Arrays/equals (synthdef/encode-synthdef via-macro)
                                    (synthdef/encode-synthdef manual)))))
   (testing "CL params"
-    (let [via-macro (sdef/defsynth parity-c ((freq 440) (amp 0.5 :ar))
+    (let [via-macro (sdef/defsynth nil parity-c ((freq 440) (amp 0.5 :ar))
                       (io/out:ar 0 (osc/sin-osc:ar freq 0 1 amp)))
-          manual (let [m (synthdef/make-synthdef "parity-c")]
-                   (binding [ugen/*synthdef* m]
-                     (ctl/with-controls ((freq 440) (amp 0.5 :ar))
-                       (io/out:ar 0 (osc/sin-osc:ar freq 0 1 amp)))
-                     (synthdef/build-synthdef m) m))]
+          manual (let [m (synthdef/make-synthdef "parity-c")
+                       root (ctl/with-controls m ((freq 440) (amp 0.5 :ar))
+                              (io/out:ar 0 (osc/sin-osc:ar freq 0 1 amp)))]
+                   (synthdef/build-synthdef m root)
+                   m)]
       (is (java.util.Arrays/equals (synthdef/encode-synthdef via-macro)
                                    (synthdef/encode-synthdef manual))))))
 
@@ -62,24 +61,23 @@
                   (println "SKIP live defsynth tests:" (.getMessage e)) nil))]
     (when probe
       (try
-        (binding [server/*s* probe]
-          (testing "defsynth sends, synth starts"
-            (sdef/defsynth live-tone [freq 440]
-              (io/out:ar 0 (osc/sin-osc:ar freq 0 1 0.2)))
-            (let [n (sdef/synth 'live-tone :freq 442.0)]
-              (is (wait-playing n))
-              (server/node-free n)))
-          (testing "play fades in and starts"
-            (let [p (sdef/play (osc/sin-osc:ar 440 0 1 0.2) :gain 0.5)]
-              (is (wait-playing p))
-              (is (= 0.02 (sdef/synthdef-metadata "temp-synth" :fade-time)))
-              (server/node-free p))))
+        (testing "defsynth sends, synth starts"
+          (sdef/defsynth probe live-tone [freq 440]
+            (io/out:ar 0 (osc/sin-osc:ar freq 0 1 0.2)))
+          (let [n (sdef/synth probe 'live-tone :freq 442.0)]
+            (is (wait-playing n))
+            (server/node-free n)))
+        (testing "play fades in and starts"
+          (let [p (sdef/play probe (osc/sin-osc:ar 440 0 1 0.2) :gain 0.5)]
+            (is (wait-playing p))
+            (is (= 0.02 (sdef/synthdef-metadata "temp-synth" :fade-time)))
+            (server/node-free p)))
         (finally
           (when (server/boot? probe)
             (server/server-quit probe)))))))
 
 (deftest live-bundle-starts-synth
-  (testing "server/at bundles (incl. int-addressed /s_new) start nodes now"
+  (testing "explicit bundles (incl. int-addressed /s_new) start nodes now"
     (let [probe (try
                   (let [s (server/make-external-server "test" :port live-port
                                                        :just-connect? true)]
@@ -89,12 +87,12 @@
                     (println "SKIP live bundle test:" (.getMessage e)) nil))]
       (when probe
         (try
-          (binding [server/*s* probe]
-            (sdef/defsynth live-bundled [freq 440]
-              (io/out:ar 0 (osc/sin-osc:ar freq 0 1 0.2)))
-            (let [n (server/at (server/now) (sdef/synth :live-bundled))]
-              (is (wait-playing n))
-              (server/node-free n)))
+          (sdef/defsynth probe live-bundled [freq 440]
+            (io/out:ar 0 (osc/sin-osc:ar freq 0 1 0.2)))
+          (let [[n msg] (sdef/synth-msg probe :live-bundled)]
+            (server/send-bundle probe (server/now probe) [msg])
+            (is (wait-playing n))
+            (server/node-free n))
           (finally
             (when (server/boot? probe)
               (server/server-quit probe))))))))

@@ -61,10 +61,10 @@
       (let [t2 (c/play-or-stop clock pat)]
         (is (map? t2))
         (is (c/playing-p clock t2))))
-    (testing "stop with no args clears all tasks"
+    (testing "stop :all clears all tasks"
       (c/play clock pat)
       (is (= 2 (count @(:tasks clock))))
-      (c/stop clock)
+      (c/stop clock :all)
       (is (= [] @(:tasks clock))))))
 
 (deftest stopped-tasks-drop-queued-steps

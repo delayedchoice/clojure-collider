@@ -123,11 +123,11 @@
     :else (throw (ex-info "not an envelope" {:env e}))))
 
 (defn free-self:kr [in]
-  ;; upstream (progn (multinew ...) in): unit is built for the graph,
-  ;; the input passes through as the value.
+  ;; Returns the built FreeSelf unit (not `in`): the unit must stay
+  ;; reachable or two-phase builds drop it and the synth never frees.
+  ;; No in-repo code consumes the old pass-through value.
   (ugen/multinew (fn [cls i] (ugen/ugen-new "FreeSelf" :control cls no-check :scalar i))
-                 'ugen in)
-  in)
+                 'ugen in))
 (defn process-env
   "Splice the trailing env array into the input list (ugen.lisp process-env)."
   [u]
@@ -147,13 +147,12 @@
         arrays (make-env-array-from-env envelope)]
     (ugen/unbubble
      (ugen/multinew
-      ;; splice BEFORE add: records are values, so the graph must store
-      ;; the processed copy (upstream setf-mutates in place).
+      ;; splice here: records are values, so return the processed copy
+      ;; (upstream setf-mutates in place). Collection happens at build.
       (fn [_ g ls lb ts a arr]
-        (ugen/add-to-synth
-         (process-env
-          (ugen/construct "EnvGen" rate 'ugen nil :bipolar 0
-                          [g ls lb ts a arr]))))
+        (process-env
+         (ugen/construct "EnvGen" rate 'ugen nil :bipolar 0
+                         [g ls lb ts a arr])))
       nil gate level-scale level-bias time-scale act-i arrays))))
 
 (defn env-gen:kr
@@ -194,9 +193,10 @@
                   'ugen src)))
 
 (defn pause-self:kr [in]
+  ;; Returns the built PauseSelf unit (not `in`): the unit must stay
+  ;; reachable or two-phase builds drop it and the synth never pauses.
   (ugen/multinew (fn [cls i] (ugen/ugen-new "PauseSelf" :control cls no-check :scalar i))
-                 'ugen in)
-  in)
+                 'ugen in))
 
 (defn free-self-when-done:kr [src]
   (ugen/unbubble

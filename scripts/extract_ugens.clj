@@ -1,11 +1,11 @@
 (ns extract-ugens
   "Parse upstream ugens/*.lisp defugen forms into EDN IR.
    Usage: clojure -M scripts/extract_ugens.clj > /tmp/ugen_ir.edn"
-  (:require [clojure.edn :as edn]))
+  (:require [clojure.string]))
 
 ;; -- mini s-expr reader (comments stripped, strings kept) ---------------------
 (defn- read-string-tok [s i]
-  (let [n (count s)]
+  (let [_n (count s)]
     (loop [j (inc i) sb (StringBuilder.)]
       (let [d (.charAt s j)]
         (cond (= d \\) (do (.append sb (.charAt s (inc j))) (recur (+ j 2) sb))
@@ -201,7 +201,6 @@
                       :args (parse-lambda-list (nth form 2 nil))
                       :custom true}))
               (catch Exception e
-                (binding [*out* *err*]
-                  (println "FAILED" fname (pr-str (take 2 form)) (.getMessage e)))))))))))
+                (.println System/err (str "FAILED " fname " " (pr-str (take 2 form)) " " (.getMessage e)))))))))))
 
 (-main)

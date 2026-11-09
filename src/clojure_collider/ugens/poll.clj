@@ -1,8 +1,9 @@
 (ns clojure-collider.ugens.poll
   "Port of cl-collider ugens/Poll.lisp (custom poll with trigger coercion).
    Number triggers coerce via osc/impulse:kr; the label encodes as char
-   codes with its length (upstream poll-ugen new1). The unit is built for
-   its side effect; the fns return `in`, like upstream."
+   codes with its length (upstream poll-ugen new1). The fns return the
+   built unit (SC's Poll outputs its `in`, so this is signal-identical
+   to upstream's pass-through - and keeps the unit in the graph)."
   (:require [clojure-collider.synth.ugen :as ugen]
             [clojure-collider.ugens.osc :as osc]))
 
@@ -13,6 +14,10 @@
     (ugen/unbubble (mapv #(if (number? %) (osc/impulse:kr %) %) trs))))
 
 (defn- poll-with
+  "Build the Poll unit and return it (Downstream code may use the value:
+   SC's Poll outputs its `in`, so this is signal-identical to returning
+   `in` - but unlike the old pass-through, the unit stays reachable and
+   is encoded instead of silently dropped from two-phase builds."
   [rate trig in label trigid]
   (let [tr (coerce-trig trig)]
     (ugen/multinew
@@ -22,8 +27,7 @@
          (apply ugen/ugen-new "Poll" rate cls
                 ugen/check-same-rate-as-first-input :bipolar
                 tr inn tid (count codes) codes)))
-     'poll-ugen tr in label trigid)
-    in))
+     'poll-ugen tr in label trigid)))
 
 (defn poll:ar
   "Port of Poll.lisp (poll \"Poll\")."

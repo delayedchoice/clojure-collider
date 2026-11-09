@@ -23,27 +23,26 @@
             (catch Exception e (println "SKIP proxy live:" (.getMessage e)) nil))]
     (when s
       (try
-        (binding [server/*s* s]
-          (testing "create + replace + ctrl + free"
-            (let [n1 (sdef/proxy :pz (uosc/sin-osc:ar 440 0 0.1))]
-              (is (= :pz (first (keys @(:node-proxy-table s)))))
-              (is (server/is-playing? n1))
+        (testing "create + replace + ctrl + free"
+          (let [n1 (sdef/proxy s :pz (uosc/sin-osc:ar 440 0 0.1))]
+            (is (= :pz (first (keys @(:node-proxy-table s)))))
+            (is (server/is-playing? n1))
+            (Thread/sleep 300)
+            (let [n2 (sdef/proxy s :pz (uosc/sin-osc:ar 660 0 0.1))]
+              (is (= n2 (get @(:node-proxy-table s) :pz)) "table swaps")
+              (is (loop [i 0]
+                    (cond (not (server/is-playing? n1)) true
+                          (> i 100) false
+                          :else (do (Thread/sleep 20) (recur (inc i)))))
+                  "old node gate-frees after release")
               (Thread/sleep 300)
-              (let [n2 (sdef/proxy :pz (uosc/sin-osc:ar 660 0 0.1))]
-                (is (= n2 (get @(:node-proxy-table s) :pz)) "table swaps")
-                (is (loop [i 0]
-                      (cond (not (server/is-playing? n1)) true
-                            (> i 100) false
-                            :else (do (Thread/sleep 20) (recur (inc i)))))
-                    "old node gate-frees after release")
-                (Thread/sleep 300)
-                (sdef/proxy-ctrl :pz :out-bus 0)
-                (is (= [:out-bus 0] (sdef/synthdef-metadata :pz :params)))
-                (sdef/proxy :pz nil)
-                (is (loop [i 0]
-                      (cond (not (server/is-playing? n2)) true
-                            (> i 100) false
-                            :else (do (Thread/sleep 20) (recur (inc i)))))
-                    "nil body frees")))))
+              (sdef/proxy-ctrl s :pz :out-bus 0)
+              (is (= [:out-bus 0] (sdef/synthdef-metadata :pz :params)))
+              (sdef/proxy s :pz nil)
+              (is (loop [i 0]
+                    (cond (not (server/is-playing? n2)) true
+                          (> i 100) false
+                          :else (do (Thread/sleep 20) (recur (inc i)))))
+                  "nil body frees"))))
         (finally
           (server/server-quit s))))))

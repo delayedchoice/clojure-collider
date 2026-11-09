@@ -109,10 +109,10 @@
    bumps the count. Returns {:stored <ugen> :proxies [...]}."
   [synthdef-atom ugen-name ugen-rate start value-lists lag-inputs]
   (let [flat-vals (mapv float (mapcat ensure-list value-lists))
-        built (ugen/construct ugen-name ugen-rate 'control
-                              identity :bipolar start lag-inputs)
-        stored (ugen/add-to-synth
-                (assoc built
+        stored (ugen/add-ugen-to-synthdef
+                synthdef-atom
+                (assoc (ugen/construct ugen-name ugen-rate 'control
+                                       identity :bipolar start lag-inputs)
                        :channels (count flat-vals)
                        :inputs (vec lag-inputs)))]
     (swap! synthdef-atom
@@ -127,7 +127,7 @@
    normalize-params). Returns proxy entries in trig/audio/plain order."
   [synthdef-atom params]
   (when (nil? synthdef-atom)
-    (throw (ex-info "make-control needs *synthdef*" {})))
+    (throw (ex-info "make-control needs a synthdef atom" {})))
   (doseq [p params] (assert-param! p))
   (let [by-group (group-by (comp group-of :rate) params)
         trig (vec (get by-group :trig []))
@@ -163,11 +163,12 @@
                  [:control :audio :control]))))
 
 (defmacro with-controls
-  "Bind param symbols to control proxies. Accepts Overtone vector
-   [freq 440 amp 0.5] or CL list ((freq 440) (amp 0.5 :ar)). Rates must be
-   keyword literals (needed for trig/audio/plain bind order); values are
-   runtime expressions."
-  [params & body]
+  "Bind param symbols to control proxies. SYNTHDEF-ATOM receives the
+   Control ugens explicitly (no thread-local build state). Accepts
+   Overtone vector [freq 440 amp 0.5] or CL list ((freq 440) (amp 0.5 :ar)).
+   Rates must be keyword literals (needed for trig/audio/plain bind order);
+   values are runtime expressions."
+  [synthdef-atom params & body]
   (let [ps (cond (vector? params)
                  (mapv (fn [[s spec]]
                          (cond (and (sequential? spec) (not (map? spec))
@@ -197,7 +198,7 @@
                                                 {:rate r}))))
         order (sort-by (comp group-key :rate) ps)
         syms (mapv :sym order)]
-    `(let [[~@syms] (make-control ugen/*synthdef*
+    `(let [[~@syms] (make-control ~synthdef-atom
                                   [~@(map (fn [{:keys [name value rate lag]}]
                                             `{:name ~name
                                               :value ~value
@@ -215,12 +216,11 @@
                         :else (str n))))
 
 (defn named-control
-  ([n rate] (named-control n rate nil nil))
-  ([n rate value] (named-control n rate value nil))
-  ([n rate value lag]
-   (let [syn ugen/*synthdef*]
-     (when (nil? syn)
-       (throw (ex-info "named-control needs *synthdef*" {})))
+  "Manual control creation against SYNTHDEF-ATOM (explicit build target)."
+  ([syn n rate] (named-control syn n rate nil nil))
+  ([syn n rate value] (named-control syn n rate value nil))
+  ([syn n rate value lag]
+   (let [syn (or syn (throw (ex-info "named-control needs a synthdef atom" {})))]
      (when (and (sequential? lag) (some #(== 0 %) lag))
        (throw (ex-info "'lagTime' has bad input" {:lag lag})))
      (let [lag (if (and (number? lag) (zero? lag)) nil lag)
@@ -282,6 +282,6 @@
              proxy)))))))
 
 (defn kr
-  ([n] (named-control n :kr))
-  ([n value] (named-control n :kr value))
-  ([n value lag] (named-control n :kr value lag)))
+  ([syn n] (named-control syn n :kr))
+  ([syn n value] (named-control syn n :kr value))
+  ([syn n value lag] (named-control syn n :kr value lag)))

@@ -7,10 +7,18 @@
     (is (= 16384 (:num-control-bus o)))
     (is (= 1024 (:num-audio-bus o)))
     (is (nil? (:device o)))
-    (is (= 0 (:num-input-bus o)) "output-only by default"))
+    (is (= 0 (:num-input-bus o)) "output-only by default")
+    (is (= "scsynth" (:sc-synth-program o)))
+    (is (nil? (:plugin-paths o)))
+    (is (= "~/.local/share/SuperCollider/synthdefs/" (:synthdefs-path o)))
+    (is (nil? (:auto-silence o))))
   (let [o (opts/make-server-options {:num-output-bus 2 :verbosity -1})]
     (is (= 2 (:num-output-bus o)))
-    (is (= -1 (:verbosity o)))))
+    (is (= -1 (:verbosity o))))
+  (testing "new fields merge"
+    (let [o (opts/make-server-options {:auto-silence true :sc-synth-program "/bin/scsynth"})]
+      (is (= true (:auto-silence o)))
+      (is (= "/bin/scsynth" (:sc-synth-program o))))))
 
  (deftest cli-build
    (let [args (opts/build-server-options

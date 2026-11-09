@@ -15,7 +15,6 @@
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
-            [clojure-collider.bus :as bus]
             [ugens :as ug]))
 
 ;; Time model. The recording changes harmony roughly every 5.5s (a half-bar
@@ -93,9 +92,9 @@
 
 ;; Offline render: writes the whole score to /tmp/eno1.aiff without a live
 ;; server. `f` is the rendered file path; nothing here makes sound in real
-;; time — `server/at` timestamps messages into the score instead.
+;; time — explicit bundles timestamp messages into the score instead.
 (defn -main [& _]
-  (let [f (server/with-rendering ["/tmp/eno1.aiff" :sr 44100 :pad total-dur]
+  (let [f (server/with-rendering [nrt "/tmp/eno1.aiff" :sr 44100 :pad total-dur]
             ;; Private stereo mix bus. Buses 0-15 are hardware (8 out + 8 in),
             ;; so 16 is the first free one; nothing else allocates, so a plain
             ;; constant beats a pinned allocator call.
@@ -107,7 +106,7 @@
             ;; 0.06 — dim upper partials, no bell); one FreeVerb per channel
             ;; (35% wet, large bright room); out to the voice's `out` bus.
             ;; Params: note (MIDI), amp (this note's loudness), out (bus).
-            (sdef/defsynth :felt-piano [note 60
+            (sdef/defsynth nrt :felt-piano [note 60
                                           amp 0.5
                                           out 0]
               (let [fr (ops/midicps note)
@@ -125,7 +124,7 @@
             ;; then a 20:1 Compander at threshold 0.7 catches stray transients
             ;; the trim misses (it has no lookahead, so it is a backstop, not
             ;; a brick wall). Param: bus (which mix bus to read).
-            (sdef/defsynth :mix-limiter [bus 16]
+            (sdef/defsynth nrt :mix-limiter [bus 16]
               (let [sig (ug/in:ar bus 2)]
                 (let [sig (ops/* sig 0.7)]
                   (ug/out:ar 0 (ug/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
@@ -135,7 +134,7 @@
             ;; `line` ramps 0->1 across the whole render, `clip` pins it at
             ;; the 0.3 mark, `lin-lin` rescales that segment to a 0->1 fade.
             ;; Runs the full duration; :out-bus routes it to the mix bus.
-            (sdef/play
+            (sdef/play nrt
               (let [t (ug/line:kr 0 1 total-dur)
                     g (ug/lin-lin:kr (ug/clip:kr t 0.0 0.3) 0.0 0.3 0 1)
                     voice (fn [m]
@@ -154,10 +153,11 @@
                     [b midis amp] events
                     m midis]
               (when (pos? amp)
-                (server/at (+ start-at (* bi bar) (* b beat))
-                           (sdef/synth :felt-piano :note m
-                                      :amp (ops// amp (count midis))
-                                      :out mixbus))))
+                (let [[_ msg] (sdef/synth-msg nrt :felt-piano :note m
+                                              :amp (ops// amp (count midis))
+                                              :out mixbus)]
+                  (server/send-bundle nrt (+ start-at (* bi bar) (* b beat))
+                    [msg]))))
             ;; Limiter goes last (:pos :tail) so it hears the full mix.
-            (sdef/synth :mix-limiter :bus mixbus :pos :tail))]
+            (sdef/synth nrt :mix-limiter :bus mixbus :pos :tail))]
     (println :rendered f)))

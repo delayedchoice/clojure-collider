@@ -9,16 +9,15 @@
 (defn -main [& _]
   (let [s (server/make-external-server "example" :port 57131)]
     (server/server-boot s)
-    (binding [server/*s* s]
-      (sdef/defsynth :sine-wave
-        [note 60]
-        (let [freq (ops/midicps note)
-              sig (ug/sin-osc:ar [freq (ops/+ freq 2)] 0 0.2)]
-          (ug/out:ar 0 sig)))
-      (let [n (sdef/synth :sine-wave)]
-        (Thread/sleep 800)
-        (server/ctrl n :note 72)
-        (Thread/sleep 800)
-        (server/node-free n)))
+    (sdef/defsynth s :sine-wave
+      [note 60]
+      (let [freq (ops/midicps note)
+            sig (ug/sin-osc:ar [freq (ops/+ freq 2)] 0 0.2)]
+        (ug/out:ar 0 sig)))
+    (let [n (sdef/synth s :sine-wave)]
+      (Thread/sleep 800)
+      (server/ctrl n :note 72)
+      (Thread/sleep 800)
+      (server/node-free n))
     (server/server-quit s)
     (println :done)))

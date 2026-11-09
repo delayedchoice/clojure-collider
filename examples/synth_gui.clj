@@ -102,10 +102,9 @@
                 (when-not @echo
                   (if (s/value play-btn)
                     (do (free!)
-                        (binding [server/*s* s]
-                          (reset! node (apply sdef/synth synth-name
+                          (reset! node (apply sdef/synth s synth-name
                                              (mapcat (fn [[k v]] [k v])
-                                                      (merge @levels extra-args)))))
+                                                      (merge @levels extra-args))))
                         (s/config! status :text "playing"))
                     (do (free!)
                         (s/config! status :text "stopped"))))))
@@ -128,12 +127,10 @@
                   ;; scsynth keeps sounding with no window to stop it.
                   (try (free!)
                        (catch Exception e
-                         (binding [*out* *err*]
-                           (println :teardown-free-failed (ex-message e)))))
+                         (.println System/err (str :teardown-free-failed " " (ex-message e)))))
                   (try (when (server/boot? s) (server/server-quit s))
                        (catch Exception e
-                         (binding [*out* *err*]
-                           (println :teardown-quit-failed (ex-message e)))))))
+                         (.println System/err (str :teardown-quit-failed " " (ex-message e)))))))
       (s/invoke-later (-> frame (s/config! :size [420 :by 600]) s/show!))
       {:frame frame :node node :levels levels
        :sliders (into {} (map (juxt :key :slider)) rows)

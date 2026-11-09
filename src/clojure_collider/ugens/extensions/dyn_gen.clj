@@ -38,8 +38,8 @@
 (defn dyn-gen:ar
   "Port of Extensions/DynGen.lisp dyn-gen.ar (\"DynGen\" multiout).
   The script must be registered under name (upstream dyn-gen-send);
-  server delivery (dyn-gen-send/load/free) has no *s*/OSC counterpart
-  in this port and is omitted."
+  server delivery (dyn-gen-send/load/free) has no default-server/OSC
+  counterpart in this port and is omitted."
   [num-output name & {:keys [inputs params update sync pause]
                       :or {inputs nil params nil update 1.0 sync 0.0 pause 0.0}}]
   (let [spec (get @dyn-gen-register-table name)]

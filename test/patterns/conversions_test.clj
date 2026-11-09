@@ -87,9 +87,13 @@
       (is (= 3 (c/degree-note 2 :scale :minor :lookup lookup)))
       (is (= 2 (c/note-degree 3 :scale :minor :lookup lookup)))))
   (testing "unknown scale without lookup throws (isolated from global wiring)"
-    (binding [c/*scale-lookup* nil]
-      (is (thrown? clojure.lang.ExceptionInfo
-                   (c/degree-midinote 0 :scale :dorian))))))
+    (let [prior @c/scale-lookup]
+      (try
+        (reset! c/scale-lookup nil)
+        (is (thrown? clojure.lang.ExceptionInfo
+                     (c/degree-midinote 0 :scale :dorian)))
+        (finally
+          (reset! c/scale-lookup prior))))))
 
 (deftest midi-clamp
   (testing "truncate and clamp to 0..127"

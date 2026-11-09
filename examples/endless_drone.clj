@@ -31,8 +31,8 @@
 (defn define-voice!
   "Single :endless def. Fixed 24s life (9s period + 15s fade),
   self-freeing - see header."
-  []
-  (sdef/defsynth :endless
+  [s]
+  (sdef/defsynth s :endless
     [f0 440
      f1 440
      f2 440
@@ -62,28 +62,28 @@
          (mapcat (fn [i] [(keyword (str "f" i)) (p/pwhite 0 5000)])
                  (range 9))))
 
-(defn player []
-  (p/stop)
-  (p/start-clock-loop :tempo bpm)
+(defn player [clock]
+  (p/stop clock :all)
   (p/pdef :endpat (create-phrase))
-  (p/play :endpat))
+  (p/play clock :endpat))
 
 (defn -main [& [seed-arg secs-arg]]
   (let [seed (if seed-arg (Long/parseLong seed-arg) 7)
-        secs (if secs-arg (Long/parseLong secs-arg) 90)]
-    (binding [server/*s* (p/setup-performance!
-                           :seed seed :port 57139 :tempo bpm
-                           :name "endless")]
-      (define-voice!)
-      (player)
-      (if (pos? secs)
-        (do (Thread/sleep (* secs 1000))
-            (p/end :endpat)
-            (Thread/sleep (* (+ iteration-secs fade-secs) 1000)))
-        (do (println :playing-forever-ctrl-c-to-stop)
-            (.addShutdownHook (Runtime/getRuntime)
-              (Thread. ^Runnable
-                (fn [] (server/server-quit server/*s*))))
-            (while true
-              (Thread/sleep 60000)))))
-    (println :done)))
+        secs (if secs-arg (Long/parseLong secs-arg) 90)
+        {:keys [server clock]}
+        (p/setup-performance!
+          :seed seed :port 57139 :tempo bpm
+          :name "endless")]
+    (define-voice! server)
+    (player clock)
+    (if (pos? secs)
+      (do (Thread/sleep (* secs 1000))
+          (p/end clock :endpat)
+          (Thread/sleep (* (+ iteration-secs fade-secs) 1000)))
+      (do (println :playing-forever-ctrl-c-to-stop)
+          (.addShutdownHook (Runtime/getRuntime)
+            (Thread. ^Runnable
+              (fn [] (server/server-quit server))))
+          (while true
+            (Thread/sleep 60000)))))
+  (println :done))

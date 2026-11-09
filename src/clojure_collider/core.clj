@@ -1,10 +1,9 @@
 (ns clojure-collider.core
   "Public re-export — mirrors the sc package export list.
    Consumers can (:require [clojure-collider.core :as sc]).
-
-   Dynamic vars (*s*, *synthdef*, *synth-definition-mode*,
-   *temp-synth-name*) are NOT copied here: binding a copy would not affect
-   the home namespace. Require the owning ns to bind them."
+   Thread-local state has been eliminated: every server-taking fn receives
+   the server as its explicit first arg, so requiring this ns alone is
+   enough. Require the owning ns only for vars intentionally left there."
   (:refer-clojure :exclude [* + - / < <= > >= abs dec inc min max mod sync range proxy])
   (:require [clojure-collider.server.server :as server]
             [clojure-collider.server.scheduler :as sched]
@@ -44,7 +43,7 @@
   node-to-pos install-reply-responder add-reply-responder
   remove-reply-responder all-running-servers
   make-group group-free-all server-free-all node-free release ctrl map-bus
-  control-get control-set callback at now quant beat-dur jack-connect
+  control-get control-set callback now quant beat-dur jack-connect
   make-nrt-server with-rendering ->NrtServer map->NrtServer nrt-formats)
 
 ;; -- scheduler / options ---------------------------------------------------

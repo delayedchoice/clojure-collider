@@ -27,14 +27,12 @@
       (if-not playing?
         (let [num-out (:num-output-bus (:options server))]
           (reset! (:volume-control-synth server)
-                  (binding [server/*s* server
-                            sdef/*temp-synth-name* (str "volume-amp-control-" num-out)]
-                    (sdef/play
-                      (ctl/with-controls ((amp amp) (gate 1))
-                        (io/x-out:ar 0 (e/linen:kr gate 0.01 1.0 0.05 :act :free)
+                  (sdef/play server
+                    (ctl/with-controls ((amp amp) (gate 1))
+                      (io/x-out:ar 0 (e/linen:kr gate 0.01 1.0 0.05 :act :free)
                                      (ops/* (io/in:ar 0 num-out)
                                             (flt/lag:kr amp 0.1))))
-                      :to 1 :pos :after))))
+                    :to 1 :pos :after :name (str "volume-amp-control-" num-out))))
         (server/ctrl ctl-synth :amp amp))
       (when playing?
         (server/ctrl ctl-synth :amp 1.0 :gate 0)))

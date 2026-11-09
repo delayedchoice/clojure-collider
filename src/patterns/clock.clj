@@ -17,39 +17,34 @@
 
 ;; -- clock --------------------------------------------------------------------
 
-(def ^:dynamic *clock*
-  "The default clock: {:tempo-clock TempoClock :tasks (atom [task])
-   :enabled-backends (atom [backend])}."
-  nil)
-
 (defn make-clock
   "Make a clock map with an empty task list and no backends.
-   TEMPO-CLOCK is a scheduler/TempoClock (or nil for untimed use)."
+   TEMPO-CLOCK is a scheduler/TempoClock (or nil for untimed use).
+   :server holds the clock's sounding server (or nil when serverless)."
   ([] (make-clock nil))
   ([tempo-clock]
    {:tempo-clock tempo-clock
     :tasks (atom [])
-    :enabled-backends (atom [])}))
+    :enabled-backends (atom [])
+    :server (atom nil)}))
 
 (defn start-clock-loop
-  "Ensure a running clock in *clock* and return it. TEMPO is BPM (default 60,
-   i.e. upstream make-clock tempo 1 BPS). Reuses the existing clock unless
-   :force is true."
-  [& {:keys [tempo force] :or {tempo 60}}]
-  (when (or force (nil? *clock*))
-    (let [tc (sched/make-tempo-clock "patterns clock" nil :bpm (double tempo)
-                                     :time-sync? false)]
-      (sched/tempo-clock-run tc)
-      (alter-var-root #'*clock* (constantly (make-clock tc)))))
-  *clock*)
+  "Start a fresh pattern clock at TEMPO BPM (default 60, i.e. upstream
+   make-clock tempo 1 BPS) and return it. Always builds a new clock;
+   nothing is shared or installed globally."
+  [& {:keys [tempo] :or {tempo 60}}]
+  (let [tc (sched/make-tempo-clock "patterns clock" nil :bpm (double tempo)
+                                   :time-sync? false)]
+    (sched/tempo-clock-run tc)
+    (make-clock tc)))
 
 (defn enable-backend!
-  "Add backend B to clock's enabled backends (default *clock*). Returns B."
-  ([b] (enable-backend! *clock* b))
-  ([clock b]
-   (swap! (:enabled-backends clock)
-          (fn [bs] (if (some #(identical? % b) bs) bs (conj bs b))))
-    b))
+  "Add backend B to CLOCK's enabled backends. Returns B."
+  [clock b]
+  (swap! (:enabled-backends clock)
+         (fn [bs] (if (some #(identical? % b) bs) bs (conj bs b))))
+  b)
+
  
  (defn prune-dead-backends!
    "Drop backends whose server has since quit (stale REPL rigs: re-running
@@ -67,60 +62,60 @@
   clock)
 
 (defn disable-backend!
-  "Remove backend B from clock's enabled backends. Returns B."
-  ([b] (disable-backend! *clock* b))
-  ([clock b]
-   (swap! (:enabled-backends clock)
-          (fn [bs] (vec (remove #(identical? % b) bs))))
-   b))
+  "Remove backend B from CLOCK's enabled backends. Returns B."
+  [clock b]
+  (swap! (:enabled-backends clock)
+         (fn [bs] (vec (remove #(identical? % b) bs))))
+  b)
 
- (defn setup-performance!
-   "One-call live rig: seed the pattern RNG, boot an external scsynth,
-   start the pattern clock. Returns the booted server - bind it:
-   (binding [server/*s* (setup-performance! :seed 7)] ...).
-   play auto-enables a sounding backend on the booted *s*, so no backend
-   wiring is needed. Defaults suit dense polyphonic examples.
+(defn setup-performance!
+  "One-call live rig: seed the pattern RNG, boot an external scsynth,
+   start a fresh pattern clock holding the server. Returns
+   {:server s :clock c}. play auto-enables a sounding backend from the
+   clock's server, so no backend wiring is needed. Defaults suit dense
+   polyphonic examples.
    Input streams are OFF by default (-i 0, output-only); pass :input?
    true to open the input device. (Applies to the built default
    options; explicit :options are used as-is.)"
-   [& {:keys [seed port tempo name options input?]
-       :or {seed 7 port 57138 tempo 120 name "example"}}]
-   (u/seed-rng! seed)
-   (let [s (server/make-external-server
-              name :port port
-              :options (or options
-                           (opts/make-server-options
-                            (cond-> {:realtime-mem-size 65536
-                                    :max-num-nodes 4096}
-                              input? (assoc :num-input-bus 8)))))]
-     (server/server-boot s)
-     (start-clock-loop :tempo tempo)
-     ;; Re-running a rig in one REPL leaves backends bound to the quit
-     ;; server; prune them before this rig adds its own.
-     (prune-dead-backends! *clock*)
-     s))
- 
- (defn connect-server!
-   "One call for the standard live boilerplate: boot external server S,
-   start the pattern clock at TEMPO bpm, enable a ClColliderBackend on S.
-   Returns S - call it from the binding form:
-   (binding [server/*s* (connect-server! s :tempo 90)] ...).
-   Takes S explicitly (not server/*s*) because the binding init-expr runs
-   before *s* is bound. Enabling up front also suppresses play's
+  [& {:keys [seed port tempo name options input?]
+      :or {seed 7 port 57138 tempo 120 name "example"}}]
+  (u/seed-rng! seed)
+  (let [s (server/make-external-server
+             name :port port
+             :options (or options
+                          (opts/make-server-options
+                           (cond-> {:realtime-mem-size 65536
+                                   :max-num-nodes 4096}
+                             input? (assoc :num-input-bus 8)))))]
+    (server/server-boot s)
+    (let [clock (start-clock-loop :tempo tempo)]
+      (reset! (:server clock) s)
+      ;; Re-running a rig in one REPL leaves backends bound to the quit
+      ;; server; prune them before this rig adds its own.
+      (prune-dead-backends! clock)
+      {:server s :clock clock})))
+
+(defn connect-server!
+  "One call for the standard live boilerplate: boot SERVER, record it on
+   CLOCK, prune dead backends, enable a ClColliderBackend on SERVER.
+   Returns SERVER. Enabling up front also suppresses play's
    auto-backend (it only fires with no backends enabled), so exactly one
    backend sounds.
-   S boots input-free by default (-i 0, output-only); :input? true
-   opens the input device (assocs :num-input-bus 8 into S's options
-   before boot)."
-   [s & {:keys [tempo input?] :or {tempo 90}}]
-   (let [s (cond-> s input? (update :options assoc :num-input-bus 8))]
-     (server/server-boot s)
-     (start-clock-loop :tempo tempo)
-     ;; Same REPL re-run prune as setup-performance!: drop backends bound
-     ;; to quit servers before adding this rig's own.
-     (prune-dead-backends! *clock*)
-     (enable-backend! (backend/make-cl-collider-backend s))
-     s))
+   SERVER boots input-free by default (-i 0, output-only); :input? true
+   opens the input device (assocs :num-input-bus 8 into its options
+   before boot). TEMPO sets the BPM on CLOCK's tempo clock (when it has
+   one; untimed nil tempo-clock clocks keep their own time)."
+  [clock server & {:keys [tempo input?] :or {tempo 90}}]
+  (let [server (cond-> server input? (update :options assoc :num-input-bus 8))]
+    (server/server-boot server)
+    (reset! (:server clock) server)
+    (when-let [tc (:tempo-clock clock)]
+      (sched/tempo-clock-bpm tc (double tempo)))
+    ;; Same REPL re-run prune as setup-performance!: drop backends bound
+    ;; to quit servers before adding this rig's own.
+    (prune-dead-backends! clock)
+    (enable-backend! clock (backend/make-cl-collider-backend server))
+    server))
 
 ;; -- beats / quant --------------------------------------------------------------
 
@@ -219,66 +214,62 @@
         nil))))
 
 (defn play
-  "Play X (pattern map, event map, or pdef keyword) on CLOCK (*clock*).
+  "Play X (pattern map, event map, or pdef keyword) on CLOCK.
    Returns the task map. The task loops until stopped; see end/stop.
-   With no backends enabled and a booted server on server/*s*, a
-   ClColliderBackend is enabled automatically, so play makes sound by
-   default; enable backends explicitly (e.g. DebugBackend) to override
-   or to hear nothing."
-  ([x] (play *clock* x))
-  ([clock x & {:keys [quant loop?] :or {loop? true}}]
-   (when (nil? clock)
-     (throw (ex-info "play: no clock; call start-clock-loop first" {})))
-   (let [source (resolve-source x)
-         stream (p/as-pstream source)
-         start (quant-next (or quant (:quant (when (map? source) source))
-                               (:play-quant (when (map? source) source)))
-                           (clock-beats clock))
-         task {:id (swap! task-ids inc)
-               :source source
-               :stream stream
-               :next-beat (atom (double start))
-               :loop? (atom (boolean loop?))}]
-     (swap! (:tasks clock) conj task)
-     (when (and (empty? @(:enabled-backends clock))
-                server/*s* (server/boot? server/*s*))
-       (enable-backend! clock (backend/make-cl-collider-backend server/*s*)))
-     (when-let [tc (:tempo-clock clock)]
-       (sched/tempo-clock-add tc (double start)
-         (fn [] (step-task! clock task))))
-     task)))
+   With no backends enabled, a ClColliderBackend is auto-enabled from
+   the clock's live server, else the sole live server; with neither,
+   no backend sounds. Enable backends explicitly (e.g. DebugBackend)
+   to override or to hear nothing."
+  [clock x & {:keys [quant loop?] :or {loop? true}}]
+  (when (nil? clock)
+    (throw (ex-info "play: no clock; call start-clock-loop first" {})))
+  (let [source (resolve-source x)
+        stream (p/as-pstream source)
+        start (quant-next (or quant (:quant (when (map? source) source))
+                              (:play-quant (when (map? source) source)))
+                          (clock-beats clock))
+        task {:id (swap! task-ids inc)
+              :source source
+              :stream stream
+              :next-beat (atom (double start))
+              :loop? (atom (boolean loop?))}]
+    (swap! (:tasks clock) conj task)
+    (when (empty? @(:enabled-backends clock))
+      (when-let [s (or (let [cs @(:server clock)]
+                         (when (and cs (server/live-server? cs)) cs))
+                       (server/sole-live-server))]
+        (enable-backend! clock (backend/make-cl-collider-backend s))))
+    (when-let [tc (:tempo-clock clock)]
+      (sched/tempo-clock-add tc (double start)
+        (fn [] (step-task! clock task))))
+    task))
 
 (defn playing-p
   "True when TASK (or the task playing pdef keyword) is on CLOCK."
-  ([x] (playing-p *clock* x))
-  ([clock x]
-   (let [ts @(:tasks clock)]
-     (boolean
-      (if (keyword? x)
-        (let [src (try (resolve-source x) (catch clojure.lang.ExceptionInfo _ ::missing))]
-          (some #(= (:source %) src) ts))
-        (some #(or (= (:id %) (:id x)) (= % x)) ts))))))
+  [clock x]
+  (let [ts @(:tasks clock)]
+    (boolean
+     (if (keyword? x)
+       (let [src (try (resolve-source x) (catch clojure.lang.ExceptionInfo _ ::missing))]
+         (some #(= (:source %) src) ts))
+       (some #(or (= (:id %) (:id x)) (= % x)) ts)))))
 
 (defn stop
-  "Stop a task, the tasks playing pdef keyword X, all tasks (:all / no
-  arg), or all tasks on CLOCK-MAP (1-arity with a clock map)."
-  ([] (stop *clock* :all))
-  ([x] (if (and (map? x) (contains? x :tasks))
-         (stop x :all)
-         (stop *clock* x)))
-  ([clock x]
-   (cond
-     (or (= x :all) (nil? x))
-     (do (reset! (:tasks clock) []) nil)
+  "Stop a task, the tasks playing pdef keyword X, or all tasks (:all)
+   on CLOCK."
+  [clock x]
+  (cond
+    (or (= x :all) (nil? x))
+    (do (reset! (:tasks clock) []) nil)
 
-     (keyword? x)
-     (let [src (resolve-source x)]
-       (swap! (:tasks clock)
-              (fn [ts] (vec (remove #(= (:source %) src) ts))))
-       nil)
+    (keyword? x)
+    (let [src (resolve-source x)]
+      (swap! (:tasks clock)
+             (fn [ts] (vec (remove #(= (:source %) src) ts))))
+      nil)
 
-     :else
-     (remove-task! clock x))))
+    :else
+    (remove-task! clock x)))
 
 (defn panic!
   "Stop everything immediately: drop all clock tasks (no new notes), then
@@ -286,42 +277,40 @@
    pair sprayed at every (host,port) this process ever registered, so
    quit-but-ringing records die too. Cross-process orphans (another REPL
    JVM, a hand-started scsynth) are out of reach: `killall scsynth`.
-   No clock or no servers: skips what's absent. Returns nil."
-  ([] (panic! *clock*))
-  ([clock]
-   (let [n (if clock (count @(:tasks clock)) 0)]
-     (when clock (stop clock :all))
-     (server/panic-all!)
-     (println :panic-tasks-dropped n)
-     nil)))
+   Returns nil."
+  [clock]
+  (let [n (count @(:tasks clock))]
+    (stop clock :all)
+    (server/panic-all!)
+    (println :panic-tasks-dropped n)
+    nil))
 
 (defn end
-  "End TASK (or tasks playing pdef keyword X): finish the current cycle
-   without looping (sets loop? false). Returns the updated task, or nil."
-  ([x] (end *clock* x))
-  ([clock x]
-   (if (keyword? x)
-     (let [src (resolve-source x)]
-       (swap! (:tasks clock)
-              (fn [ts] (mapv (fn [t]
-                               (if (= (:source t) src)
-                                 (do (reset! (:loop? t) false) t)
-                                 t))
-                             ts)))
-       nil)
-     (do (reset! (:loop? x) false) x))))
+  "End TASK (or tasks playing pdef keyword X) on CLOCK: finish the
+   current cycle without looping (sets loop? false). Returns the
+   updated task, or nil."
+  [clock x]
+  (if (keyword? x)
+    (let [src (resolve-source x)]
+      (swap! (:tasks clock)
+             (fn [ts] (mapv (fn [t]
+                              (if (= (:source t) src)
+                                (do (reset! (:loop? t) false) t)
+                                t))
+                            ts)))
+      nil)
+    (do (reset! (:loop? x) false) x)))
 
 (defn play-or-stop
-  "Stop X if it is playing, else play it. Returns the task or nil."
-  ([x] (play-or-stop *clock* x))
-  ([clock x]
-   (if (playing-p clock x)
-     (do (stop clock (if (keyword? x)
-                       x
-                       (first (filter #(= (:id %) (:id x))
-                                      @(:tasks clock)))))
-         nil)
-     (play clock x))))
+  "On CLOCK, stop X if it is playing, else play it. Returns the task or nil."
+  [clock x]
+  (if (playing-p clock x)
+    (do (stop clock (if (keyword? x)
+                      x
+                      (first (filter #(= (:id %) (:id x))
+                                     @(:tasks clock)))))
+        nil)
+    (play clock x)))
 
 ;; -- synchronous test helper -----------------------------------------------------
 

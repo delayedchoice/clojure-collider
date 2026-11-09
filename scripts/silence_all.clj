@@ -1,5 +1,5 @@
 ;; Find every live scsynth on this machine and silence it - no REPL state,
-;; no bindings, no registry needed. Run while sound is playing:
+;; no dynamic scope, no registry needed. Run while sound is playing:
 ;;   clojure -M scripts/silence_all.clj
 ;; Prints the responding ports, then /clearSched + /g_deepFree 0 to each.
 ;; Servers stay up (unlike killall); truly foreign boxes are out of reach.

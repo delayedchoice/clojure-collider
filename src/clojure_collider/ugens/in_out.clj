@@ -58,38 +58,38 @@
 (defn out:ar [bus sig]
   ;; upstream (apply multinew ... (cons bus channels)): channels splice
   ;; into ONE unit; expansion only pairs a sequential bus across them.
+  ;; Returns the built Out unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list (fn [cls & args]
                          (apply ugen/ugen-new "Out" :audio cls
                                 (abstract-out-check 1) :bipolar args))
-                       no-out-cls (into [bus] (ensure-channels sig))))
-  0)
+                       no-out-cls (into [bus] (ensure-channels sig)))))
 
 (defn out:kr [bus sig]
+  ;; Returns the built Out unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list (fn [cls & args]
                          (apply ugen/ugen-new "Out" :control cls
                                 (abstract-out-check 1) :bipolar args))
-                       no-out-cls (into [bus] (ensure-channels sig))))
-  0)
+                       no-out-cls (into [bus] (ensure-channels sig)))))
 
 (defn x-out:ar [bus xfade sig]
+  ;; Returns the built XOut unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list
     (fn [cls & args]
       (apply ugen/ugen-new "XOut" :audio cls
              (abstract-out-check 2) :bipolar args))
     no-out-cls
-    (into [bus xfade] (replace-zeroes-with-silence (ensure-channels sig)))))
-  0)
+    (into [bus xfade] (replace-zeroes-with-silence (ensure-channels sig))))))
 
 (defn x-out:kr [bus xfade sig]
+  ;; Returns the built XOut unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list (fn [cls & args]
                          (apply ugen/ugen-new "XOut" :control cls
                                 (abstract-out-check 2) :bipolar args))
-                       no-out-cls (into [bus xfade] (ensure-channels sig))))
-  0)
+                       no-out-cls (into [bus xfade] (ensure-channels sig)))))
 
 
 ;; ---- generated mechanical forms (scripts/emit_ugens.clj) ----
@@ -136,45 +136,46 @@
                            'multiout-ugen chanls bus)))
 
 (defn replace-out:ar [bus sig]
+  ;; Returns the built ReplaceOut unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list (fn [cls & args]
                          (apply ugen/ugen-new "ReplaceOut" :audio cls
                                 (abstract-out-check 1) :bipolar args))
-                       no-out-cls (into [bus] (replace-zeroes-with-silence (ensure-channels sig)))))
-  0)
+                       no-out-cls (into [bus] (replace-zeroes-with-silence (ensure-channels sig))))))
 
 (defn replace-out:kr [bus sig]
+  ;; Returns the built ReplaceOut unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list (fn [cls & args]
                          (apply ugen/ugen-new "ReplaceOut" :control cls
                                 (abstract-out-check 1) :bipolar args))
-                       no-out-cls (into [bus] (ensure-channels sig))))
-  0)
+                       no-out-cls (into [bus] (ensure-channels sig)))))
+
 
 (defn offset-out:ar [bus sig]
+  ;; Returns the built OffsetOut unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list (fn [cls & args]
                          (apply ugen/ugen-new "OffsetOut" :audio cls
                                 (abstract-out-check 1) :bipolar args))
-                       no-out-cls (into [bus] (replace-zeroes-with-silence (ensure-channels sig)))))
-  0)
+                       no-out-cls (into [bus] (replace-zeroes-with-silence (ensure-channels sig))))))
 
 (defn offset-out:kr [bus sig]
   (throw (ex-info (str "Control rate OffsetOut is not implemented (bus: " bus " channels-array: " sig ").")
                   {:bus bus :sig sig})))
 
 (defn local-out:ar [sig]
+  ;; Returns the built LocalOut unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list (fn [cls & args]
                          (apply ugen/ugen-new "LocalOut" :audio cls
                                 (abstract-out-check 0) :bipolar args))
-                       no-out-cls (vec (replace-zeroes-with-silence (ensure-channels sig)))))
-  0)
+                       no-out-cls (vec (replace-zeroes-with-silence (ensure-channels sig))))))
 
 (defn local-out:kr [sig]
+  ;; Returns the built LocalOut unit (graph root for build-synthdef).
   (ugen/unbubble
    (ugen/multinew-list (fn [cls & args]
                          (apply ugen/ugen-new "LocalOut" :control cls
                                 (abstract-out-check 0) :bipolar args))
-                       no-out-cls (vec (ensure-channels sig))))
-  0)
+                       no-out-cls (vec (ensure-channels sig)))))

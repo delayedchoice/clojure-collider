@@ -47,14 +47,14 @@
     (ops/* rin rout)))
 
 (defn -main [& _]
-  (let [f (server/with-rendering ["/tmp/ascent2.aiff" :sr 44100 :pad dur]
+  (let [f (server/with-rendering [nrt "/tmp/ascent2.aiff" :sr 44100 :pad dur]
             ;; pluck voice for the arp
-            (sdef/defsynth :pluck [note 63]
+            (sdef/defsynth nrt :pluck [note 63]
               (let [env (ug/env-gen:kr (ug/env [0 1 0] [0.01 2.5]) :act :free)
                     sig (ops/+ (ug/sin-osc:ar (ops/midicps note) 0 0.12)
                                (ug/sin-osc:ar (ops/* (ops/midicps note) 2.0) 0 0.04))]
                 (ug/out:ar 0 [sig sig])))
-            (sdef/play
+            (sdef/play nrt
               (let [t (ug/line:kr 0 1 dur)
                     arc (ug/env-gen:kr (ug/env arc-levels arc-times) :act :no-action)
                     dyn (ops/+ 0.25 (ops/* 0.75 arc))
@@ -73,5 +73,6 @@
                 (ug/out:ar 0 [(ops/* 0.26 dyn sig) (ops/* 0.26 dyn sig)])))
             ;; schedule the arp (messages timestamped into the score)
             (doseq [[m at] arp]
-              (server/at at (sdef/synth :pluck :note m))))]
+              (let [[_ msg] (sdef/synth-msg nrt :pluck :note m)]
+                (server/send-bundle nrt (double at) [msg]))))]
     (println :rendered f)))

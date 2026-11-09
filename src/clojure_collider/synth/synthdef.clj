@@ -2,7 +2,7 @@
   (:require [clojure-collider.synth.ugen :as ugen])
   (:import [java.io ByteArrayOutputStream DataOutputStream]))
 
-(def ^:dynamic *synthdef-version* 2)
+(def synthdef-version 2)
 (def type-id (.getBytes "SCgf" "UTF-8"))
 
 (defrecord SynthDef [name controls control-names control-ugen-count children constants available width-first-ugens rewrite-in-progress named-controls])
@@ -142,7 +142,77 @@
                                                (mapv #(if (= (canon-index %) ui) r %) inps)))))
                        kids2)))))))
 
-(defn build-synthdef [synthdef-atom]
+(defn- walk-reachable
+  "Collect graph UGen records reachable from ROOT (a ugen, proxy, or
+   sequential of those; numbers/nil contribute nothing). Returns a map
+   creation-index -> record. ProxyOutputs resolve through :source and are
+   never collected themselves (only their source unit is encoded)."
+  [root]
+  (let [found (atom {})]
+    (letfn [(visit [x]
+              (cond
+                (ugen/proxy-output? x) (visit (:source x))
+                (ugen/ugen-like? x)
+                (let [ci (:creation-index x)]
+                  (when (and (some? ci) (not (contains? @found ci)))
+                    (swap! found assoc ci x)
+                    (doseq [inp (:inputs x)] (visit inp))))
+                (sequential? x) (doseq [e x] (visit e))
+                :else nil))]
+      (visit root)
+      @found)))
+
+(defn- collect-graph!
+  "Two-phase build step replacing dynamic registration: gather the
+   reachable-but-unindexed graph ugens, merge with any pre-registered
+   children (controls) in global creation order - exactly the order
+   registration produced - and assign :synth-index from zero. Final
+   records are built once and shared by reference: identity-based passes
+   (fuse-sums at-pos) keep working exactly as with registration."
+  [synthdef-atom roots]
+  (let [have (into #{} (keep :creation-index (:children @synthdef-atom)))
+        found (reduce (fn [m r] (merge m (walk-reachable r))) {} roots)
+        fresh (->> (vals found)
+                   (remove #(contains? have (:creation-index %))))
+        merged (sort-by #(or (:creation-index %) -1)
+                        (concat (:children @synthdef-atom) fresh))
+        fix (fn fix [fb x]
+              (cond (ugen/proxy-output? x)
+                    (if-let [s (get fb (:creation-index (:source x)))]
+                      (assoc x :source s)
+                      x)
+                    (ugen/ugen-like? x)
+                    (let [ci (:creation-index x)]
+                      (if (and (some? ci) (contains? fb ci))
+                        (get fb ci)
+                        x))
+                    (sequential? x) (mapv #(fix fb %) x)
+                    :else x))]
+    (loop [all []
+           fb {}
+           idx 0
+           [u & rest] merged]
+      (if (nil? u)
+        (swap! synthdef-atom assoc :children all)
+        (let [fixed (assoc u
+                           :synth-index idx
+                           :width-first-antecedents []
+                           :inputs (mapv #(fix fb %) (:inputs u)))]
+          (recur (conj all fixed)
+                 (assoc fb (:creation-index fixed) fixed)
+                 (inc idx)
+                 rest))))))
+
+(defn build-synthdef
+  "Two-phase build: collect the graph reachable from ROOTS (a ugen, proxy,
+   sequential, or number - numbers contribute nothing), then the upstream
+   pipeline: check-inputs, optimize-graph, collect-constants,
+   topo-logical-sort, index-ugens. Replaces dynamic registration with an
+   explicit root walk; byte-identical for connected graphs."
+  [synthdef-atom roots]
+  ;; collect-reachable (replaces *synthdef* registration side effects)
+  (let [roots (if (sequential? roots) roots [roots])]
+    (collect-graph! synthdef-atom roots))
   ;; mirrors synthdef.lisp build-synthdef: check-inputs, optimize-graph,
   ;; collect-constants, topo-logical-sort, index-ugens.
   (let [s @synthdef-atom]
@@ -201,10 +271,10 @@
     (.writeShort out (short 0)) ; variants
     (.toByteArray baos)))
 
-(defn encode-synthdef [synthdef-atom]
-  (case *synthdef-version*
-    2 (encode-synthdef-v2 synthdef-atom)
-    (throw (ex-info "unsupported version" {:v *synthdef-version*}))))
+(defn encode-synthdef
+  "Encode to scsyndef bytes (v2 only)."
+  [synthdef-atom]
+  (encode-synthdef-v2 synthdef-atom))
 
 (defn write-synthdef-file [synthdef-atom path]
   (let [bytes (encode-synthdef synthdef-atom)]

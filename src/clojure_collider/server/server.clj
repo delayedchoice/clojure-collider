@@ -13,24 +13,14 @@
             [clojure-collider.osc.transmit :as tx]
             [clojure-collider.synth.ugen :as ugen]
             [clojure-collider.server.options :as opts]
-            [clojure-collider.server.scheduler :as sched])
+            [clojure-collider.server.scheduler :as sched]
+            [clojure-collider.server.silent :as silent])
   (:import [java.util.concurrent ConcurrentHashMap CompletableFuture TimeUnit ConcurrentLinkedQueue]
            [java.util.concurrent.locks ReentrantLock]
            [java.net DatagramSocket DatagramPacket InetAddress]))
 (declare server-free-all make-group send-bundle)
 
-;; -- dynamics ------------------------------------------------------------
-
-(def ^:dynamic *s* nil)
-(def ^:dynamic *sc-synth-program* "scsynth")
-(def ^:dynamic *sc-plugin-paths* nil)
-(def ^:dynamic *sc-synthdefs-path*
-  (str (System/getProperty "user.home") "/.local/share/SuperCollider/synthdefs/"))
-(def ^:dynamic *async-in-place* nil)
-(def ^:dynamic *run-level* :execute)
-(def ^:dynamic *bundle-msg-container* nil)
-(def ^:dynamic *bundle-synth-container* nil)
-(def ^:dynamic *nrt-pad* nil)
+;; -- shared registries (atoms are fine: no thread-local state) -----------------------
 
 (def ^:private boot-hooks (atom []))
 (def ^:private quit-hooks (atom []))
@@ -155,13 +145,12 @@
                         {:id addr :message msg})))
       msg)))
 (defmacro with-rendering
-  "Render BODY offline: binds *s* to an NrtServer, collects the OSC score,
-   writes <output>.osc, runs `scsynth -N`, deletes the score unless
-   :keep-osc-file. Returns the absolute output path.
-   (with-rendering [\"/tmp/x.aiff\" :sr 44100 :format :int24] (play ...)).
-   Scheduler callbacks need a running clock, so prefer (at t ...) inside.
+  "Render BODY offline: lexically binds SYM to an NrtServer, collects the
+   OSC score, writes <output>.osc, runs `scsynth -N`, deletes the score
+   unless :keep-osc-file. Returns the absolute output path.
+   (with-rendering [s \"/tmp/x.aiff\" :sr 44100 :format :int24] (play s ...)).
    Mirrors with-rendering (server.lisp l.582)."
-  [[output & {:keys [pad keep-osc-file format sr bpm num-of-output]
+  [[sym output & {:keys [pad keep-osc-file format sr bpm num-of-output]
               :or {format :int24 sr 44100 num-of-output 2}}]
    & body]
   `(let [file-name# (.getAbsolutePath (io/file ~output))
@@ -173,45 +162,44 @@
          ext# (str/upper-case (subs file-name# (inc dot#)))
          fmt# (or (nrt-formats ~format)
                   (throw (ex-info "unknown NRT format" {:format ~format})))
-         nrt# (make-nrt-server :bpm (double (or ~bpm (if *s* (clock-bpm) 60.0))))]
-     (binding [*s* nrt# *nrt-pad* ~pad]
-       (reset! (:default-group nrt#) (make-group :id 1 :pos :head :to 0 :server nrt#))
-       ~@body
-       (when *nrt-pad*
-         (send-bundle *s* (double *nrt-pad*) [["/c_set" 0 0]]))
-       (let [pad-ticks# (when ~pad (long (* (double ~pad) 4294967296.0)))
-             ordered# (sort-by first @(:streams nrt#))
-             kept# (if pad-ticks#
-                     (take-while #(<= (first %) pad-ticks#) ordered#)
-                     ordered#)]
-         (with-open [out# (io/output-stream osc-file#)]
-           (doseq [[tt# msgs#] kept#]
-             (let [b# (enc/encode-bundle (mapv nrt-score-message msgs#) tt#)
-                   n# (enc/encode-int32 (alength b#))]
-               (.write out# ^java.io.OutputStream n#)
-               (.write out# ^java.io.OutputStream b#)))))
-       (let [plug-paths# (map #(.getAbsolutePath (io/file (str %)))
-                              (or *sc-plugin-paths* []))
-             pb# (doto (ProcessBuilder. ^java.util.List
-                                        (into [*sc-synth-program*]
-                                              (concat
-                                               ;; empty -U overrides the default
-                                               ;; plugin path and hides core UGens
-                                               (when (seq plug-paths#)
-                                                 ["-U" (str/join (str java.io.File/pathSeparatorChar)
-                                                                 plug-paths#)])
-                                               ["-o" (str ~num-of-output)
-                                                "-N" osc-file# "_" file-name# (str ~sr) ext# fmt#])))
-                       (.redirectErrorStream true)
-                       (.inheritIO))
-             proc# (.start pb#)
-             exit# (.waitFor proc#)]
-         (when-not (zero? exit#)
-           (throw (ex-info "scsynth -N failed"
-                           {:exit exit# :osc osc-file# :output file-name#}))))
-       (when-not ~keep-osc-file
-         (.delete (io/file osc-file#)))
-       file-name#)))
+         ~sym (make-nrt-server :bpm (double (or ~bpm 60.0)))]
+     (reset! (:default-group ~sym) (make-group :id 1 :pos :head :to 0 :server ~sym))
+     ~@body
+     (when ~pad
+       (send-bundle ~sym (double ~pad) [["/c_set" 0 0]]))
+     (let [pad-ticks# (when ~pad (long (* (double ~pad) 4294967296.0)))
+            ordered# (sort-by first @(:streams ~sym))
+            kept# (if pad-ticks#
+                    (take-while #(<= (first %) pad-ticks#) ordered#)
+                    ordered#)]
+       (with-open [out# (io/output-stream osc-file#)]
+         (doseq [[tt# msgs#] kept#]
+           (let [b# (enc/encode-bundle (mapv nrt-score-message msgs#) tt#)
+                 n# (enc/encode-int32 (alength b#))]
+             (.write out# ^java.io.OutputStream n#)
+             (.write out# ^java.io.OutputStream b#)))))
+     (let [plug-paths# (map #(.getAbsolutePath (io/file (str %)))
+                            (or (:plugin-paths (:options ~sym)) []))
+           pb# (doto (ProcessBuilder. ^java.util.List
+                                      (into [(or (:sc-synth-program (:options ~sym)) "scsynth")]
+                                            (concat
+                                             ;; empty -U overrides the default
+                                             ;; plugin path and hides core UGens
+                                             (when (seq plug-paths#)
+                                               ["-U" (str/join (str java.io.File/pathSeparatorChar)
+                                                               plug-paths#)])
+                                             ["-o" (str ~num-of-output)
+                                              "-N" osc-file# "_" file-name# (str ~sr) ext# fmt#])))
+                     (.redirectErrorStream true)
+                     (.inheritIO))
+           proc# (.start pb#)
+           exit# (.waitFor proc#)]
+       (when-not (zero? exit#)
+         (throw (ex-info "scsynth -N failed"
+                         {:exit exit# :osc osc-file# :output file-name#}))))
+     (when-not ~keep-osc-file
+       (.delete (io/file osc-file#)))
+     file-name#))
 
 (defn send-message [server & msg]
   (if (instance? NrtServer server)
@@ -254,18 +242,14 @@
 (defn uninstall-reply-responder [server cmd]
   (tx/remove-osc-responder @(:device server) (str cmd)))
 
-(defn add-reply-responder [cmd handler]
-  (install-reply-responder *s* cmd handler))
+(defn add-reply-responder [server cmd handler]
+  (install-reply-responder server cmd handler))
 
-(defn remove-reply-responder [cmd]
-  (uninstall-reply-responder *s* cmd))
+(defn remove-reply-responder [server cmd]
+  (uninstall-reply-responder server cmd))
 
 (defn message-distribute [synth msg server]
-  (if (= :bundle *run-level*)
-    (do (assert (= *s* server) "bundle mode needs *s*")
-        (swap! *bundle-msg-container* conj msg)
-        (swap! *bundle-synth-container* conj synth))
-    (apply send-message server msg))
+  (apply send-message server msg)
   synth)
 
 ;; -- sync --------------------------------------------------------------------------
@@ -280,34 +264,24 @@
     (and t (identical? (Thread/currentThread) ^Thread t))))
 
 (defn sync
-  ([] (sync *s*))
-  ([server]
-   (cond (instance? NrtServer server) server
-         *async-in-place* nil
-         (or (reply-thread? server) (clock-thread? server))
-         (binding [*out* *err*]
-           (println "SYNC has no effect in reply or TempoClock thread")
-           nil)
-         :else
-         (let [id (swap! (:sync-counter server) inc)
-               fut (CompletableFuture.)]
-           (.put ^ConcurrentHashMap (:sync-ids server) (int id) fut)
-           (send-message server "/sync" (int id))
-           (try (.get fut sync-timeout-secs TimeUnit/SECONDS)
-                (catch java.util.concurrent.TimeoutException _
-                  (binding [*out* *err*]
-                    (println "SYNC timed out after" sync-timeout-secs "s"))
-                  nil)
-                (finally (.remove ^ConcurrentHashMap (:sync-ids server) (int id))))))
-   server))
-
-(defmacro with-async
-  "Suppress inner sync calls; with :blocking, one sync at the end."
-  [opts & body]
-  `(let [res# (binding [*async-in-place* true] ~@body)]
-     (when (:blocking ~opts)
-       (sync))
-     res#))
+  [server]
+  (cond (instance? NrtServer server) server
+        (or (reply-thread? server) (clock-thread? server))
+        (binding [*out* *err*]
+          (println "SYNC has no effect in reply or TempoClock thread")
+          nil)
+        :else
+        (let [id (swap! (:sync-counter server) inc)
+              fut (CompletableFuture.)]
+          (.put ^ConcurrentHashMap (:sync-ids server) (int id) fut)
+          (send-message server "/sync" (int id))
+          (try (.get fut sync-timeout-secs TimeUnit/SECONDS)
+               (catch java.util.concurrent.TimeoutException _
+                 (binding [*out* *err*]
+                   (println "SYNC timed out after" sync-timeout-secs "s"))
+                 nil)
+               (finally (.remove ^ConcurrentHashMap (:sync-ids server) (int id))))))
+  server)
 
 ;; -- responders -----------------------------------------------------------------------
 
@@ -389,8 +363,23 @@
 
 ;; -- boot/quit --------------------------------------------------------------------------
 
-(defn- scsynth-args [server]
-  (into ["-u" (str (:port server))] (opts/build-server-options (:options server))))
+(defn- scsynth-args
+  "CLI args for scsynth. Reads sc config from (:options server):
+   :sc-synth-program is applied by the caller (ProcessBuilder command),
+   :plugin-paths (nil -> []) overrides the -U plugin path entry,
+   :synthdefs-path is excluded here (ensured to exist in server-boot).
+   Silent-boot args (see silent/silent-boot-args) supply :device and any
+   :extra-args when silent/auto-silence? holds for these options."
+  [server]
+  (let [opts (into {} (:options server))
+        plug-paths (or (:plugin-paths opts) [])
+        silent (silent/silent-boot-args opts)
+        opts (cond-> (dissoc opts :plugin-paths :sc-synth-program :synthdefs-path)
+               silent (merge (select-keys silent [:device])))]
+    (cond-> (into ["-u" (str (:port server))] (opts/build-server-options opts))
+      (seq plug-paths) (conj "-U" (str/join (str java.io.File/pathSeparatorChar)
+                                            (map str plug-paths)))
+      (:extra-args silent) (into (:extra-args silent)))))
 
 (defn- check-port-free! [server]
    ;; Fail fast when PORT is already bound (usually another scsynth):
@@ -402,8 +391,9 @@
           (throw (ex-info (str "port " (:port server) " already in use")
                          {:server (:name server) :port (:port server)})))))
  (defn- bootup-server-process [server]
-   (when-not (:just-connect? server)
-    (let [pb (doto (ProcessBuilder. ^java.util.List (into [*sc-synth-program*] (scsynth-args server)))
+  (when-not (:just-connect? server)
+   (let [program (or (:sc-synth-program (:options server)) "scsynth")
+         pb (doto (ProcessBuilder. ^java.util.List (into [program] (scsynth-args server)))
                (.redirectErrorStream true))
           proc (.start pb)
           drain (doto (Thread. ^Runnable
@@ -443,6 +433,15 @@
 (defn server-boot [server]
   (when (boot? server)
     (throw (ex-info "server already running" {:server (:name server)})))
+  ;; sc config lives in (:options server): ensure the synthdef directory
+  ;; exists and resolve silent-boot overrides (silent slice owns the
+  ;; opts-first shapes of auto-silence?/silent-boot-args).
+  (when-let [sd (:synthdefs-path (:options server))]
+    (.mkdirs (io/file (str sd))))
+  (let [silent? (silent/auto-silence? (:options server))
+        silent-args (silent/silent-boot-args (:options server))]
+    (when (or silent? silent-args)
+      (log-boot-line! server "silent boot overrides applied")))
   (when-not (:just-connect? server) (check-port-free! server))
   (bootup-server-process server)
   (initialize-server-responder server)
@@ -548,13 +547,13 @@
   (send-message server "/c_set" (float index) value))
 
 (defn server-status
-  ([] (server-status *s*))
-  ([server] (send-message server "/status")))
+  [server]
+  (send-message server "/status"))
 
 ;; -- jack --------------------------------------------------------------------------------------
 
 (defn jack-connect
-  ([] (jack-connect *s* "SuperCollider" "system:capture" "system:playback"))
+  ([server] (jack-connect server "SuperCollider" "system:capture" "system:playback"))
   ([server client-name input-name output-name]
    (when (str/starts-with? (str/lower-case (System/getProperty "os.name")) "linux")
      (let [opts (:options server)]
@@ -585,19 +584,18 @@
   (case pos :head 0 :tail 1 :before 2 :after 3 :replace 4 0))
 
 (defn resolve-node
-  "Returns [id server-or-*s*] for a node id, Node/Group, or proxy keyword."
+  "Returns [id server] for a Node/Group record, else [nil nil]. The server
+   always comes from the record itself; plain ids/keywords carry no server."
   [node]
-  (cond (number? node) [node *s*]
-        (or (instance? Node node) (instance? Group node)) [(:id node) (:server node)]
-        (keyword? node) (let [n (get @(:node-proxy-table *s*) node)]
-                          (when n [(:id n) *s*]))
-        :else [nil *s*]))
+  (if (or (instance? Node node) (instance? Group node))
+    [(:id node) (:server node)]
+    [nil nil]))
 
 (defmacro with-node
-  "Bind [id server] from a node/id/keyword; skips body when unresolvable."
+  "Bind [id server] from a Node/Group record; skips body when unresolvable."
   [[id server] node & body]
   `(let [[~id ~server] (resolve-node ~node)]
-     (when ~id ~@body)))
+     (when (and ~id ~server) ~@body)))
 
 (defn- coerce-val [v]
   (cond (bus/bus? v) (float (:busnum v))
@@ -606,17 +604,24 @@
         :else (ugen/floatfy v)))
 
 (defn make-synth-msg [server synth-name id to pos & args]
-  (with-node [target target-server] to
+  (let [target (if (number? to) to (:id to))
+        target-server (if (number? to) server (:server to))]
     (assert (identical? server target-server) "target is not this server")
     (into [9 synth-name id (node-to-pos pos) target] args)))
 
+(defn ctrl-msg
+  "Pure message vector for (ctrl node & kvs)."
+  [node & kvs]
+  (let [[id _] (resolve-node node)
+        args (mapcat (fn [[k v]]
+                       [(if (number? k) k (str/lower-case (name k)))
+                        (coerce-val v)])
+                     (partition 2 kvs))]
+    (into [15 id] args)))
+
 (defn ctrl [node & kvs]
-  (with-node [id server] node
-    (let [args (mapcat (fn [[k v]]
-                         [(if (number? k) k (str/lower-case (name k)))
-                          (coerce-val v)])
-                       (partition 2 kvs))]
-      (message-distribute node (into [15 id] args) server))))
+  (with-node [_ server] node
+    (message-distribute node (apply ctrl-msg node kvs) server)))
 
 (defn map-bus [node & params]
   (with-node [id server] node
@@ -637,12 +642,14 @@
           (message-distribute node [command id target-id] server)
           (message-distribute node [command target-id id] target-server))))))
 
-(defn node-free [node & [server]]
-  ;; Prefer the node's own server: *s* is unbound on threads like the Swing
-  ;; EDT, which previously NPE'd inside send-message (nil server).
-  (let [server (or server (:server node) *s*)]
-    (with-node [id _] node
-      (message-distribute node ["/n_free" id] server))))
+(defn node-free-msg
+  "Pure message vector for (node-free node)."
+  [node & _]
+  ["/n_free" (:id node)])
+
+(defn node-free [node]
+  (with-node [_ server] node
+    (message-distribute node (node-free-msg node) server)))
 
 (defn release [node]
   (ctrl node :gate 0))
@@ -657,47 +664,46 @@
     (.put ^ConcurrentHashMap (:on-free-handlers server) (int id) handler)))
 
 (defn make-group [& {:keys [id server pos to] :or {pos :head}}]
-  (let [server (or server *s*)
-        to (or to @(:default-group server))]
-    (with-node [target-id target-server] to
-      (assert (identical? server target-server) "target is not this server")
-      (let [gid (if id id (swap! (:group-id server) inc))
-            group (map->Group {:server server :id gid :pos pos :to target-id})]
-        (message-distribute group ["/g_new" gid (node-to-pos pos) target-id] server)
-        (sync server)
-        group))))
+  (assert (some? server) "make-group needs an explicit :server")
+  (let [to (or to @(:default-group server))
+        target-id (if (number? to) to (:id to))
+        target-server (if (number? to) server (:server to))]
+    (assert (identical? server target-server) "target is not this server")
+    (let [gid (if id id (swap! (:group-id server) inc))
+          group (map->Group {:server server :id gid :pos pos :to target-id})]
+      (message-distribute group ["/g_new" gid (node-to-pos pos) target-id] server)
+      (sync server)
+      group)))
 
 (defn server-query-all-nodes
-  ([] (server-query-all-nodes *s*))
-  ([server] (send-message server "/g_dumpTree" (int 0) (int 0))))
+  [server]
+  (send-message server "/g_dumpTree" (int 0) (int 0)))
 
 (defn group-free-all [group]
   (with-node [id server] group
     (send-message server "/g_freeAll" (int id))))
 
 (defn server-free-all
-  ([] (server-free-all *s*))
-  ([server]
-   (binding [*s* server]
-     (sched/sched-clear @(:scheduler server))
-     (sched/tempo-clock-clear @(:tempo-clock server))
-     (send-message server "/g_freeAll" (int 0))
-     (send-message server "/clearSched")
-     (reset! (:default-group server) (make-group :id 1 :pos :head :to 0))
-     (doseq [hook @server-free-all-hooks] (hook)))
-   server))
+  [server]
+  (sched/sched-clear @(:scheduler server))
+  (sched/tempo-clock-clear @(:tempo-clock server))
+  (send-message server "/g_freeAll" (int 0))
+  (send-message server "/clearSched")
+  (reset! (:default-group server) (make-group :id 1 :pos :head :to 0 :server server))
+  (doseq [hook @server-free-all-hooks] (hook))
+  server)
 
 (defn stop
-  ([] (stop @(:default-group *s*)))
-  ([group & groups]
-   (sched/sched-clear @(:scheduler *s*))
-   (sched/tempo-clock-clear @(:tempo-clock *s*))
-   (send-message *s* "/clearSched")
+  ([server] (stop server @(:default-group server)))
+  ([server group & groups]
+   (sched/sched-clear @(:scheduler server))
+   (sched/tempo-clock-clear @(:tempo-clock server))
+   (send-message server "/clearSched")
    (doseq [group (cons group groups)]
      (with-node [id _] group
-       (send-message *s* "/g_freeAll" (int id))))
+       (send-message server "/g_freeAll" (int id))))
    (doseq [hook @stop-hooks] (hook))
-   *s*))
+   server))
 
 (defn live-server?
   "True when S is a booted external server with a live OSC device.
@@ -709,17 +715,12 @@
        (let [dev (when-let [d (:device s)] @d)]
          (and (some? dev) (= :running @(:status dev))))))
 
-(defn- sole-running-server
-  "The single live server, nil when none. Throws when several live
-   servers run and *s* is unbound - there is no way to know which one
-   is sounding."
+(defn sole-live-server
+  "The single live-server? server, or nil unless exactly one is live.
+   Never throws: ambiguity dissolves to nil."
   []
   (let [rs (filterv live-server? (all-running-servers))]
-    (cond (= 1 (count rs)) (first rs)
-          (> (count rs) 1)
-          (throw (ex-info "panic!: several servers running, bind server/*s*"
-                          {:running (mapv :name rs)}))
-          :else nil)))
+    (when (= 1 (count rs)) (first rs))))
 
 (defn panic!
   "Cut all sound immediately. Clears pending language-side scheduler and
@@ -727,19 +728,14 @@
    already on scsynth) and /g_deepFree 0 (frees every synth under root,
    groups left intact - so no group rebuild is needed, unlike /g_freeAll
    which takes group 1 itself). Tails do not ring out.
-   With no server argument, uses *s* when booted, else the sole running
-   server (nil when none is running - a no-op).
-   Returns the server (nil when there was nothing to silence)."
-  ([] (when-let [s (or (when (and *s* (boot? *s*)) *s*)
-                       (sole-running-server))]
-        (panic! s)))
-  ([server]
-   (sched/sched-clear @(:scheduler server))
-   (sched/tempo-clock-clear @(:tempo-clock server))
-   (send-message server "/clearSched")
-   (send-message server "/g_deepFree" (int 0))
-   (println :panic-silenced (:name server))
-   server))
+   Returns the server."
+  [server]
+  (sched/sched-clear @(:scheduler server))
+  (sched/tempo-clock-clear @(:tempo-clock server))
+  (send-message server "/clearSched")
+  (send-message server "/g_deepFree" (int 0))
+  (println :panic-silenced (:name server))
+  server)
 
 (defn find-live-servers
   "Probe localhost UDP PORTS for scsynth /status replies. Needs no record,
@@ -799,55 +795,36 @@
     (println :panic-all {:live (mapv :name live) :sprayed targets})
     nil))
 
-(defmacro at
-  "Collect body messages into one timestamped bundle (RT sends, NRT collects)."
-  [time & body]
-  `(binding [*run-level* :bundle
-             *bundle-msg-container* (atom [])
-             *bundle-synth-container* (atom [])]
-     ~@body
-     (send-bundle *s* ~time @*bundle-msg-container*)
-     (ugen/unbubble (reverse @*bundle-synth-container*))))
-
 ;; -- scheduler/clock facade (server.lisp tail; RT paths) ---------------------------------
 
-(defn callback [time f & args]
-  (apply sched/sched-add @(:scheduler *s*) time f args))
+(defn callback [server time f & args]
+  (apply sched/sched-add @(:scheduler server) time f args))
 
-(defn now []
-  (sched/sched-time @(:scheduler *s*)))
+(defn now [server]
+  (sched/sched-time @(:scheduler server)))
 
 (defn quant
-  ([next-time] (sched/sched-quant @(:scheduler *s*) next-time 0.5))
-  ([next-time offset] (sched/sched-quant @(:scheduler *s*) next-time offset)))
+  ([server next-time] (sched/sched-quant @(:scheduler server) next-time 0.5))
+  ([server next-time offset] (sched/sched-quant @(:scheduler server) next-time offset)))
 
 (defn clock-bpm
-  ([] (sched/tempo-clock-bpm @(:tempo-clock *s*)))
-  ([bpm] (sched/tempo-clock-bpm @(:tempo-clock *s*) bpm)))
+  ([server] (sched/tempo-clock-bpm @(:tempo-clock server)))
+  ([server bpm] (sched/tempo-clock-bpm @(:tempo-clock server) bpm)))
 
-(defn clock-beats []
-  (sched/tempo-clock-beats @(:tempo-clock *s*)))
+(defn clock-beats [server]
+  (sched/tempo-clock-beats @(:tempo-clock server)))
 
-(defn clock-quant [q]
-  (sched/tempo-clock-quant @(:tempo-clock *s*) q))
+(defn clock-quant [server q]
+  (sched/tempo-clock-quant @(:tempo-clock server) q))
 
-(defn beat-dur [beats]
-  (* @(:beat-dur @(:tempo-clock *s*)) beats))
+(defn beat-dur [server beats]
+  (* @(:beat-dur @(:tempo-clock server)) beats))
 
-(defn dur-beat [secs]
-  (* secs (/ (clock-bpm) 60.0)))
+(defn dur-beat [server secs]
+  (* secs (/ (clock-bpm server) 60.0)))
 
-(defn clock-add [beat f & args]
-  (sched/tempo-clock-add @(:tempo-clock *s*) beat (fn [] (apply f args))))
+(defn clock-add [server beat f & args]
+  (sched/tempo-clock-add @(:tempo-clock server) beat (fn [] (apply f args))))
 
-(defn clock-clear []
-  (sched/tempo-clock-clear @(:tempo-clock *s*)))
-
-(defmacro at-beat [beat & body]
-  `(let [clock# @(:tempo-clock *s*)]
-     (at (+ (sched/beats-to-secs clock# ~beat) @(:timing-offset clock#))
-         ~@body)))
-
-(defmacro at-task [beat & body]
-  `(clock-add (+ ~beat (* (:sched-ahead (:options *s*) 0.2) (/ (clock-bpm) 60.0)))
-              (fn [] ~@body)))
+(defn clock-clear [server]
+  (sched/tempo-clock-clear @(:tempo-clock server)))

@@ -251,13 +251,13 @@
                       [0 []] n)))))
 
 (defn- shuffle-with-rng
-  "Fisher-Yates shuffle of vector v using u/*rng* (seedable)."
+  "Fisher-Yates shuffle of vector v using the global RNG (seedable via `seed-rng!`)."
   [v]
   (let [a (object-array v)
         n (alength a)]
     (loop [i (dec n)]
       (when (pos? i)
-        (let [j (.nextInt ^java.util.Random u/*rng* (inc i))
+        (let [j (.nextInt ^java.util.Random @u/default-rng (inc i))
               t (aget a i)]
           (aset a i (aget a j))
           (aset a j t))

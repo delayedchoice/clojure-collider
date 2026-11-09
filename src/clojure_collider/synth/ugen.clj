@@ -2,7 +2,7 @@
   (:require [clojure.string :as str])
   (:import [java.io DataOutputStream]))
 
-(def ^:dynamic *synthdef* nil)
+(defonce ^:private creation-counter (atom 0))
 (def inf Float/POSITIVE_INFINITY)
 
 ;; rates
@@ -95,11 +95,6 @@
 ;; helpers for synthdef interaction (forward decl)
 (declare add-ugen-to-synthdef add-constant-to-synthdef)
 
-(defn add-to-synth [ugen]
-  (if *synthdef*
-    (add-ugen-to-synthdef *synthdef* ugen)
-    ugen))
-
 ;; multi-channel expansion (mirrors CL lst-operation/multinew)
 (defn- list-ref [lst n] (nth lst (mod n (count lst))))
 
@@ -127,10 +122,13 @@
    for optimize-graph dispatch. Operator ctors (new1) set opcode + computed
    rate per multichannel combo, mirroring ugen.lisp new1 methods."
   [name rate cls check-fn signal-range special-index inputs]
-  (let [syn *synthdef*
-        flavor (keyword (str/lower-case (clojure.core/name cls)))
-        base {:name name :rate rate :synthdef syn :check-fn check-fn :signal-range signal-range
+  (let [flavor (keyword (str/lower-case (clojure.core/name cls)))
+        base {:name name :rate rate :synthdef nil :check-fn check-fn :signal-range signal-range
               :synth-index -1 :special-index special-index :antecedents [] :descendants [] :width-first-antecedents []
+              ;; Creation order stamp: build-synthdef collects reachable
+              ;; ugens sorted by this, reproducing registration order
+              ;; without thread-local state.
+              :creation-index (swap! creation-counter inc)
               :inputs (vec inputs) :ugen-class flavor}]
     (cond (= flavor :abstract-out) (map->NoOutputUGen base)
           (= flavor :nooutput-ugen) (map->NoOutputUGen base)
@@ -140,7 +138,7 @@
           :else (map->UGen base))))
 
 (defn ugen-new [name rate cls check-fn signal-range & inputs]
-  (add-to-synth (construct name rate cls check-fn signal-range 0 inputs)))
+  (construct name rate cls check-fn signal-range 0 inputs))
 
 
 (def dce-flavors
@@ -288,10 +286,9 @@
   [name rate signal-range channels & inputs]
   (when-not (number? channels)
     (throw (ex-info "multiout channels must be a number" {:channels channels})))
-  (let [stored (add-to-synth
-                (assoc (construct name rate 'multiout-ugen nil signal-range
-                                  0 (vec inputs))
-                       :channels (int channels)))]
+  (let [stored (assoc (construct name rate 'multiout-ugen nil signal-range
+                                 0 (vec inputs))
+                      :channels (int channels))]
     (unbubble
      (mapv (fn [i]
              (map->ProxyOutput

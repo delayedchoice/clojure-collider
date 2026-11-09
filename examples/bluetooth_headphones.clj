@@ -57,10 +57,9 @@
   (let [s (server/make-external-server "bluetooth" :port port
             :options (opts/make-server-options options))]
     (server/server-boot s)
-    (binding [server/*s* s]
-      (let [n (sdef/play (ug/sin-osc:ar [440 442] 0 0.2))]
-        (Thread/sleep (* 1000 secs))
-        (server/node-free n)))
+    (let [n (sdef/play s (ug/sin-osc:ar [440 442] 0 0.2))]
+      (Thread/sleep (* 1000 secs))
+      (server/node-free n))
     (server/server-quit s)
     (println :done)))
 

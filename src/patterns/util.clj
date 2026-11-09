@@ -11,22 +11,21 @@
   [x]
   (= eop x))
 
-(def ^:dynamic *rng*
-  "Dynamic RNG used by all random pattern helpers. Rebind or seed for
-   deterministic output."
-  (java.util.Random.))
+(def default-rng
+  "Global RNG used by all random pattern helpers. Seeded via `seed-rng!`."
+  (atom (java.util.Random.)))
 
 (defn seed-rng!
-  "Seed the dynamic RNG in place; returns the RNG."
+  "Seed the global RNG in place; returns it."
   [n]
-  (.setSeed ^java.util.Random *rng* (long n))
-  *rng*)
+  (.setSeed ^java.util.Random @default-rng (long n))
+  @default-rng)
 
 (defn rand-range
   "Uniform random in [lo, hi)."
   [lo hi]
   (let [lo (double lo) hi (double hi)]
-    (+ lo (* (.nextDouble ^java.util.Random *rng*) (- hi lo)))))
+    (+ lo (* (.nextDouble ^java.util.Random @default-rng) (- hi lo)))))
 
 (defn rand-exp
   "Exponential random in [lo, hi]. Asserts nonzero, same-sign bounds."
@@ -36,19 +35,19 @@
                  (or (and (pos? lo) (pos? hi))
                      (and (neg? lo) (neg? hi))))
             (str "rand-exp bounds must be nonzero and share a sign, got " lo " " hi))
-    (* lo (Math/pow (/ hi lo) (.nextDouble ^java.util.Random *rng*)))))
+    (* lo (Math/pow (/ hi lo) (.nextDouble ^java.util.Random @default-rng)))))
 
 (defn rand-gauss
   "Gaussian random with MEAN and standard deviation DEV."
   [mean dev]
-  (+ (double mean) (* (double dev) (.nextGaussian ^java.util.Random *rng*))))
+  (+ (double mean) (* (double dev) (.nextGaussian ^java.util.Random @default-rng))))
 
 (defn rand-int-range
   "Uniform random integer in [lo, hi] inclusive."
   [lo hi]
   (let [lo (long lo) hi (long hi)]
     (assert (<= lo hi) (str "rand-int-range requires lo <= hi, got " lo " " hi))
-    (+ lo (long (.nextInt ^java.util.Random *rng* (inc (- hi lo)))))))
+    (+ lo (long (.nextInt ^java.util.Random @default-rng (inc (- hi lo)))))))
 
 (defn transpose
   "Transpose FREQ by SEMITONES and OCTAVES."

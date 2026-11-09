@@ -74,24 +74,21 @@
         (or (nth @(:buffers server) (int (:bufnum buffer)) nil) buffer))))
 
 (defn buffer-alloc
-  [frames & {:keys [chanls sr bufnum server complete-handler]
-             :or {chanls 1 server nil}}]
-  (let [server (or server server/*s*)]
-    (when (nil? server) (throw (ex-info "buffer-alloc needs a server" {})))
-    (let [buf (get-next-buffer server bufnum)]
-      (with-sync-or-call
-       server buf "/b_alloc" complete-handler
-       (fn []
-         (server/send-message server "/b_alloc" (int (:bufnum buf))
-                              (long (float frames)) (long (float chanls))
-                              (query-blob (:bufnum buf))
-                              (if sr (float sr) 0.0)))))))
+  [server frames & {:keys [chanls sr bufnum complete-handler]
+                     :or {chanls 1}}]
+  (let [buf (get-next-buffer server bufnum)]
+    (with-sync-or-call
+     server buf "/b_alloc" complete-handler
+     (fn []
+       (server/send-message server "/b_alloc" (int (:bufnum buf))
+                            (long (float frames)) (long (float chanls))
+                            (query-blob (:bufnum buf))
+                            (if sr (float sr) 0.0))))))
 
 (defn buffer-alloc-consecutive
-  [num-bufs frames & {:keys [chanls sr bufnum server complete-handler]
-                      :or {chanls 1}}]
-  (let [server (or server server/*s*)
-        bufs (get-consecutive-buffers server num-bufs bufnum)]
+  [server num-bufs frames & {:keys [chanls sr bufnum complete-handler]
+                             :or {chanls 1}}]
+  (let [bufs (get-consecutive-buffers server num-bufs bufnum)]
     (doseq [b bufs]
       (with-sync-or-call
        server b "/b_alloc" complete-handler
@@ -103,18 +100,16 @@
     (mapv #(nth @(:buffers server) (int (:bufnum %)) %) bufs)))
 
 (defn buffer-read
-  [path & {:keys [bufnum server] :or {server nil}}]
-  (let [server (or server server/*s*)
-        buf (get-next-buffer server bufnum)]
+  [server path & {:keys [bufnum]}]
+  (let [buf (get-next-buffer server bufnum)]
     (server/send-message server "/b_allocRead" (int (:bufnum buf)) (str path)
                          (int 0) (int -1) (query-blob (:bufnum buf)))
     (server/sync server)
     (or (nth @(:buffers server) (int (:bufnum buf)) nil) buf)))
 
 (defn buffer-read-channel
-  [path channels & {:keys [bufnum server]}]
-  (let [server (or server server/*s*)
-        buf (get-next-buffer server bufnum)
+  [server path channels & {:keys [bufnum]}]
+  (let [buf (get-next-buffer server bufnum)
         chs (if (sequential? channels) channels [channels])]
     (apply server/send-message server "/b_allocReadChannel" (int (:bufnum buf))
            (str path) (int 0) (int -1)
@@ -123,9 +118,8 @@
     (or (nth @(:buffers server) (int (:bufnum buf)) nil) buf)))
 
 (defn buffer-read-no-update
-  [path & {:keys [bufnum server complete-handler]}]
-  (let [server (or server server/*s*)
-        buf (get-next-buffer server bufnum)]
+  [server path & {:keys [bufnum complete-handler]}]
+  (let [buf (get-next-buffer server bufnum)]
     (with-sync-or-call
      server buf "/b_allocRead" complete-handler
      (fn []
@@ -133,10 +127,9 @@
                             (int 0) (int -1))))))
 
 (defn buffer-cue-soundfile
-  [path & {:keys [start-frame chanls frames bufnum server]
-           :or {start-frame 0 chanls 2 frames 32768 server nil}}]
-  (let [server (or server server/*s*)
-        buf (buffer-alloc frames :chanls chanls :bufnum bufnum :server server)]
+  [server path & {:keys [start-frame chanls frames bufnum]
+                  :or {start-frame 0 chanls 2 frames 32768}}]
+  (let [buf (buffer-alloc server frames :chanls chanls :bufnum bufnum)]
     (server/send-message server "/b_read" (int (:bufnum buf)) (str path)
                          (long start-frame) (long frames) (int 0) (int 1)
                          (query-blob (:bufnum buf)))
@@ -146,9 +139,9 @@
 (def ^:private write-formats {:int16 "int16" :int24 "int24" :float "float" :double "double"})
 
 (defn buffer-write
-  [buffer path & {:keys [header format frames start-frame leave-open server complete-handler]
+  [buffer path & {:keys [header format frames start-frame leave-open complete-handler]
                   :or {frames -1 start-frame 0 leave-open false}}]
-  (let [server (or server (:server buffer))
+  (let [server (:server buffer)
         hdr (or header (last (str/split (str path) #"\.")))
         fmt (get write-formats format "float")]
     (with-sync-or-call
@@ -158,16 +151,16 @@
                             (str hdr) fmt (long frames) (long start-frame)
                             (if leave-open 1 0))))))
 
-(defn buffer-close [buffer & {:keys [server complete-handler]}]
-  (let [server (or server (:server buffer))]
+(defn buffer-close [buffer & {:keys [complete-handler]}]
+  (let [server (:server buffer)]
     (with-sync-or-call
      server buffer "/b_close" complete-handler
      (fn [] (server/send-message server "/b_close" (float (:bufnum buffer)) (int 0))))))
 
-(defn buffer-free [bufnum-or-buffer & [server]]
-  (let [server (or server
-                   (when (instance? Buffer bufnum-or-buffer) (:server bufnum-or-buffer))
-                   server/*s*)
+(defn buffer-free [server bufnum-or-buffer]
+  (let [server (or (when (instance? Buffer bufnum-or-buffer) (:server bufnum-or-buffer))
+                   server)
+        _ (when (nil? server) (throw (ex-info "buffer-free needs a server" {})))
         n (long (if (instance? Buffer bufnum-or-buffer)
                   (:bufnum bufnum-or-buffer) bufnum-or-buffer))
         freed (with-server-lock server
@@ -180,15 +173,15 @@
     (server/sync server)
     freed))
 
-(defn buffer-zero [buffer & {:keys [server complete-handler]}]
-  (let [server (or server (:server buffer))]
+(defn buffer-zero [buffer & {:keys [complete-handler]}]
+  (let [server (:server buffer)]
     (with-sync-or-call
      server buffer "/b_zero" complete-handler
      (fn [] (server/send-message server "/b_zero" (int (:bufnum buffer)) (int 0))))))
 
-(defn buffer-normalize [buffer & {:keys [new-max wavetable? server complete-handler]
+(defn buffer-normalize [buffer & {:keys [new-max wavetable? complete-handler]
                                   :or {new-max 1.0}}]
-  (let [server (or server (:server buffer))]
+  (let [server (:server buffer)]
     (with-sync-or-call
      server buffer "/b_gen" complete-handler
      (fn [] (server/send-message server "/b_gen" (int (:bufnum buffer))
@@ -197,10 +190,11 @@
 
 (defn buffer-copy [dst src & {:keys [start-dst start-src nframes]
                               :or {start-dst 0 start-src 0 nframes -1}}]
-  (server/send-message server/*s* "/b_gen" (int (:bufnum dst)) "copy"
-                       (long start-dst) (int (:bufnum src)) (long start-src) (long nframes))
-  (server/sync server/*s*)
-  nil)
+  (let [server (:server dst)]
+    (server/send-message server "/b_gen" (int (:bufnum dst)) "copy"
+                         (long start-dst) (int (:bufnum src)) (long start-src) (long nframes))
+    (server/sync server)
+    nil))
 
 (defn buffer-set [buffer index value]
   (server/send-message (:server buffer) "/b_set"
@@ -261,7 +255,7 @@
 
 ;; -- sequences / fill / wavetable (buffer.lisp ll.367-500) --------------------------
 
-(defn- buffer-server [buffer] (or (:server buffer) server/*s*))
+(defn- buffer-server [buffer] (:server buffer))
 
 (defn buffer-send-sequence
   "Upload SEQUENCE via chunked /b_setn (1024/frame msgs, works remote).
@@ -335,18 +329,17 @@
 (defn buffer-alloc-sequence
   "Allocate a buffer holding SEQUENCE: temp WAV + read (local) or
    alloc + upload (remote). Mirrors buffer-alloc-sequence (upstream l.98)."
-  [sequence & {:keys [server sr]}]
-  (let [server (or server server/*s*)
-        vs (vec sequence)]
+  [server sequence & {:keys [sr]}]
+  (let [vs (vec sequence)]
     (if (server/is-local? server)
       (let [tmp (java.io.File/createTempFile "cl-collider" ".wav")]
         (try
           (write-mono-fl32-wav (.getAbsolutePath tmp)
                                (long (if sr sr (Math/floor (double (or @(:sample-rate server) 44100)))))
                                vs)
-          (buffer-read (.getAbsolutePath tmp) :server server)
+          (buffer-read server (.getAbsolutePath tmp))
           (finally (.delete tmp))))
-      (let [buf (buffer-alloc (count vs) :server server :sr sr)]
+      (let [buf (buffer-alloc server (count vs) :sr sr)]
         (buffer-load buf vs)
         buf))))
 
@@ -367,9 +360,9 @@
    via /b_gen. Flags pack normalize/wavetable/clear-first like upstream
    (sine1 = bare partials, sine2 = +frequencies, sine3 = +phases).
    Mirrors buffer-fill (upstream l.419)."
-  [buffer wave amplitudes & {:keys [frequencies phases server normalize wavetable clear-first]
+  [buffer wave amplitudes & {:keys [frequencies phases normalize wavetable clear-first]
                              :or {normalize true wavetable true clear-first true}}]
-  (let [server (or server (buffer-server buffer))
+  (let [server (buffer-server buffer)
         f (fn [xs] (mapv #(if (ratio? %) (float %) %) xs))
         amplitudes (f amplitudes)
         frequencies (when frequencies (f frequencies))
@@ -510,9 +503,8 @@
 (defn buffer-read-as-wavetable
   "Read PATH as a wavetable: resample channel 0 to 2^N, convert, upload
    to a 2x buffer. Mirrors buffer-read-as-wavetable (upstream l.485)."
-  [path & {:keys [bufnum server]}]
-  (let [server (or server server/*s*)
-        tmp (buffer-read path :server server)]
+  [server path & {:keys [bufnum]}]
+  (let [tmp (buffer-read server path)]
     (server/sync server)
     (let [full-path (:path tmp)
           file-frames (:frames tmp)
@@ -522,7 +514,7 @@
                                            pow2))
                                    15))
           frames (try (buffer-to-array tmp :channels 0)
-                      (finally (buffer-free tmp)))
-          buf (buffer-alloc (* 2 num-frames) :bufnum bufnum :server server)]
+                      (finally (buffer-free server tmp)))
+          buf (buffer-alloc server (* 2 num-frames) :bufnum bufnum)]
       (buffer-load buf (as-wavetable (linear-resample (vec frames) num-frames)))
       (assoc buf :path full-path))))

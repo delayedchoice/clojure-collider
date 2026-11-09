@@ -2,24 +2,24 @@
   "Unit conversions ported from cl-patterns conversions.lisp.
    Pure functions; no dependency on patterns.util or scales.
    Scale-aware degree fns resolve scales through the injected
-   `*scale-lookup*` hook (or a per-call `:lookup` option) so this
+   `scale-lookup` hook (or a per-call `:lookup` option) so this
    namespace never requires the scales namespace (which requires
    conversions back). A scale lookup fn takes a scale key and returns
    {:notes [semitone ...] :steps-per-octave n :octave-ratio r};
    plain maps with :notes and sequential note lists pass through."
   (:require [clojure.string :as string]))
 
-(def ^:dynamic *scale-lookup*
-  "Injected fn: scale key -> {:notes [...] :steps-per-octave n :octave-ratio r}.
-   Bound by the scales namespace. Nil means only :major (built-in) resolves."
-  nil)
+(def scale-lookup
+  "Global scale lookup fn: scale key -> {:notes [...] :steps-per-octave n
+   :octave-ratio r}. Nil means only :major (built-in) resolves.
+   Installed by the scales namespace."
+  (atom nil))
 
 (defn set-scale-lookup!
-  "Install the global scale lookup fn (scales-namespace wiring;
-   prefer `binding` in tests)."
+  "Install the global scale lookup fn (scales-namespace wiring)."
   [f]
-  (alter-var-root #'*scale-lookup* (constantly f))
-  *scale-lookup*)
+  (reset! scale-lookup f)
+  @scale-lookup)
 
 (def ^:private major-notes [0 2 4 5 7 9 11])
 
@@ -36,7 +36,7 @@
       (throw (ex-info "scale map missing :notes" {:scale scale})))
     (sequential? scale) {:notes (vec scale) :steps-per-octave 12 :octave-ratio 2.0}
     :else
-    (let [lk (or lookup *scale-lookup*)]
+    (let [lk (or lookup @scale-lookup)]
       (if (and lk (or (keyword? scale) (string? scale)))
         (resolve-scale (lk scale) nil)
         (if (and (keyword? scale) (= :major (keyword (name scale))))

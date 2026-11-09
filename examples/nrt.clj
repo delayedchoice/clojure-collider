@@ -6,6 +6,6 @@
             [ugens :as ug]))
 
 (defn -main [& _]
-  (let [f (server/with-rendering ["/tmp/nrt-ex.aiff" :sr 44100 :pad 1.0]
-            (sdef/play (ug/sin-osc:ar 440 0 0.2)))]
+  (let [f (server/with-rendering [nrt "/tmp/nrt-ex.aiff" :sr 44100 :pad 1.0]
+            (sdef/play nrt (ug/sin-osc:ar 440 0 0.2)))]
     (println :rendered f)))

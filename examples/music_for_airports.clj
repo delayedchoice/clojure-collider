@@ -41,8 +41,8 @@
    [:ap1-07 [84 48] [5.7 25.4] [4 4]]
    [:ap1-08 [79 51 44] [6.76 2.82 28.42] [4 4 4]]])
 
-(defn- define-voices! []
-  (sdef/defsynth :air-choir
+(defn- define-voices! [s]
+  (sdef/defsynth s :air-choir
     [freq 440
      amp 0.05
      gate 1
@@ -55,7 +55,7 @@
                      (ops/* (ug/sin-osc:ar (ops/* f 3.0) 0 1.0) 0.12))
           env (ug/env-gen:kr (ug/env-asr 1.5 1.0 3.0) :gate gate :act :free)]
       (ug/out:ar out (ug/pan2:ar (ops/* src env amp) pan 1.0))))
-  (sdef/defsynth :air-keys
+  (sdef/defsynth s :air-keys
     [freq 440
      amp 0.055
      gate 1
@@ -68,7 +68,7 @@
           dark (ug/lpf:ar src 2400.0 1.0 0.0)
           env (ug/env-gen:kr (ug/env-asr 0.01 1.0 2.5) :gate gate :act :free)]
       (ug/out:ar out (ug/pan2:ar (ops/* dark env amp) pan 1.0))))
-  (sdef/defsynth :air-verb
+  (sdef/defsynth s :air-verb
     [inbus 16
      out 0
      gate 1]
@@ -113,18 +113,19 @@
     (mapv first airport-choir)))
 
 (defn- live-main [track secs]
-  (let [s (server/make-external-server "airports" :port 57177)]
-    (binding [server/*s* (p/connect-server! s :tempo 60)]
-      (define-voices!)
-      (if (= track "1/2") (define-piano!) (define-choir!))
-      (let [verb (sdef/synth :air-verb :inbus 16)
-            names (loops-for track)]
-        (doseq [n names] (p/play n))
-        (Thread/sleep (* 1000 (max 0 (- secs 10))))
-        (when (> secs 10) (server/ctrl verb :gate 0))
-        (Thread/sleep (if (> secs 10) 10000 (* 1000 secs)))
-        (p/stop :all)
-        (server/node-free verb)))
+  (let [s (server/make-external-server "airports" :port 57177)
+        clock (p/start-clock-loop :tempo 60)]
+    (p/connect-server! clock s)
+    (define-voices! s)
+    (if (= track "1/2") (define-piano!) (define-choir!))
+    (let [verb (sdef/synth s :air-verb :inbus 16)
+          names (loops-for track)]
+      (doseq [n names] (p/play clock n))
+      (Thread/sleep (* 1000 (max 0 (- secs 10))))
+      (when (> secs 10) (server/ctrl verb :gate 0))
+      (Thread/sleep (if (> secs 10) 10000 (* 1000 secs)))
+      (p/stop clock :all)
+      (server/node-free verb))
     (server/server-quit s)
     (println :done)))
 
@@ -138,16 +139,16 @@
                          (take-while #(<= (:beat %) end-beat)
                            (p/play-take (p/pdef nm) 100000 dbg)))
                        (loops-for track)))]
-    (server/with-rendering [out :sr 44100 :pad (+ (double secs) 12.0)]
-      (define-voices!)
-      (let [verb (sdef/synth :air-verb :inbus 16)
-            be (p/make-cl-collider-backend server/*s*)]
+    (server/with-rendering [nrt out :sr 44100 :pad (+ (double secs) 12.0)]
+      (define-voices! nrt)
+      (let [verb (sdef/synth nrt :air-verb :inbus 16)
+            be (p/make-cl-collider-backend nrt)]
         (doseq [{:keys [beat event]} evts]
           (p/play-event be (assoc event :tempo bps) (double beat)))
-        (server/at (double (max 0 (- secs 10)))
-          (server/ctrl verb :gate 0))
-        (server/at (double secs)
-          (server/node-free verb))))))
+        (server/send-bundle nrt (double (max 0 (- secs 10)))
+          [(server/ctrl-msg verb :gate 0)])
+        (server/send-bundle nrt (double secs)
+          [(server/node-free-msg verb)])))))
 
 (defn -main [& args]
   (if (= "bounce" (first args))

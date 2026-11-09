@@ -65,8 +65,8 @@
 (defn sched-add
   "Enqueue (apply f args) at wall-clock `time` seconds. Stored timestamp is
    time minus the server sched-ahead, so the task fires early by lookahead.
-   bound-fn conveys the scheduling thread's dynamic bindings (*s* etc.)
-   to the worker, like CL's globals."
+   bound-fn conveys the scheduling thread's bindings to the worker,
+   like CL's globals."
   [sched time f & args]
   (push-event sched (- (double time) (sched-ahead-secs (:server sched)))
               (bound-fn [] (apply f args)))

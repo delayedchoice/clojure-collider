@@ -29,8 +29,8 @@
 (defn faust:ar
   "Port of Extensions/sc_faust.lisp faust.ar (\"Faust\" multiout).
   The DSP must be registered under name (upstream faust-send);
-  compiler/server delivery (faust-init/send/load/free) has no *s*/OSC
-  counterpart in this port and is omitted."
+  compiler/server delivery (faust-init/send/load/free) has no
+  default-server/OSC counterpart in this port and is omitted."
   [num-output name & {:keys [inputs params] :or {inputs nil params nil}}]
   (let [spec (get @faust-register-table name)]
     (assert spec (str "Can't found faust module " name))

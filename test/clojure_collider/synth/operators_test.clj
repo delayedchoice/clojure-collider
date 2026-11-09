@@ -2,16 +2,15 @@
   "operators.lisp parity: numeric fallback, constant folding,
    UGen construction, multichannel expansion, core overloads."
   (:require [clojure.test :refer [deftest is]]
-            [clojure-collider.synth.ugen :as ugen]
             [clojure-collider.synth.synthdef :as synthdef]
             [clojure-collider.synth.operators :as op]
             [clojure-collider.ugens.osc :as osc]))
 
 (defn- build [name f]
-  (binding [ugen/*synthdef* (synthdef/make-synthdef name)]
-    (let [res (f)
-          s @(doto ugen/*synthdef* synthdef/build-synthdef)]
-      [res s])))
+  (let [a (synthdef/make-synthdef name)
+        res (f)]
+    (synthdef/build-synthdef a res)
+    [res @a]))
 
 (defn- ar [freq]
   (osc/sin-osc:ar freq 0 1 0))

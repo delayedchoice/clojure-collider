@@ -1,22 +1,19 @@
 (ns clojure-collider.server.scheduler-test
   (:require [clojure.test :refer [deftest is testing]]
-            [clojure-collider.server.scheduler :as sched]
-            [clojure-collider.server.server :as server]))
+            [clojure-collider.server.scheduler :as sched]))
 
 
 (defn- fixed-sched
   ([] (fixed-sched 100.0 nil))
   ([now server] (sched/make-scheduler "test" server :timestamp-fn (fn [] now))))
-(deftest sched-conveys-bindings
-  (testing "worker thread sees the scheduling thread's dynamic bindings
-            (like CL globals; callbacks use *s*-dependent fns)"
+(deftest sched-conveys-args
+  (testing "worker thread runs the scheduled fn with its args
+            (bound-fn carries the scheduling context to the worker)"
     (let [s (fixed-sched)
-          seen (promise)
-          marker (Object.)]
-      (binding [server/*s* marker]
-        (sched/sched-add s 50.0 (fn [] (deliver seen server/*s*))))
+          seen (promise)]
+      (sched/sched-add s 50.0 (fn [a b] (deliver seen (+ a b))) 20 22)
       (sched/sched-run s)
-      (is (= marker (deref seen 2000 :timeout)))
+      (is (= 42 (deref seen 2000 :timeout)))
       (sched/sched-stop s))))
 
 (deftest clocks

@@ -1,9 +1,8 @@
 (ns patterns.pbind-test
-  "pbind/pmono/prest/pb/pdef: event yields, child advance + end, *event*."
+  "pbind/pmono/prest/pb/pdef: event yields, child advance + end."
   (:require [clojure.test :refer [deftest is testing]]
             [patterns.pbind :as pb]
-            [patterns.patterns :as p]
-            [patterns.event :as event]))
+            [patterns.patterns :as p]))
 
 (defn- seq-stream
   "Finite stream yielding VALS left to right, then eop. Stands in for
@@ -35,8 +34,8 @@
   (testing "fn of the event map itself"
     (let [[ev] (run (pb/pbind :dur 2 :half (fn [e] (/ (e :dur) 2))) 1)]
       (is (= {:dur 2 :half 1} ev))))
-  (testing "dynamic *event* bound to the partial map during pulls"
-    (let [[ev] (run (pb/pbind :dur 3 :dyn (fn [_] (:dur event/*event*))) 1)]
+  (testing "fns receive the partial map as their argument"
+    (let [[ev] (run (pb/pbind :dur 3 :dyn (fn [partial] (:dur partial))) 1)]
       (is (= 3 (:dyn ev))))))
 
 (deftest prest-marks-rest

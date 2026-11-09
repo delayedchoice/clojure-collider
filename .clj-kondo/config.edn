@@ -12,4 +12,5 @@
                         clojure-collider.synth.operators/def-binary-op hooks.defop/def-binary-op
                         clojure-collider.synth.control/with-controls hooks.ports/with-controls
                         clojure-collider.core/with-controls hooks.ports/with-controls
-                        clojure-collider.server.server/with-node hooks.ports/with-node}}}
+                        clojure-collider.server.server/with-node hooks.ports/with-node
+                        clojure-collider.server.server/with-rendering hooks.ports/with-rendering}}}

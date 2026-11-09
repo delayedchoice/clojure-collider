@@ -3,8 +3,7 @@
 ;; Bounce: clojure -M -m thursday-afternoon bounce [seconds] [out.aiff]
 ;; Silence: clojure -M -m thursday-afternoon silence (kills every local
 ;; scsynth, no REPL state needed - for when stop/panic can't reach it)
-;; REPL (same thread, no bindings): (def h (thursday-afternoon/start!)) ...
-;; (thursday-afternoon/stop! h)
+;; REPL: (def h (thursday-afternoon/start!)) ... (thursday-afternoon/stop! h)
 ;;
 ;; After https://reverbmachine.com/blog/deconstructing-brian-eno-thursday-afternoon/
 ;; Harmonically everything belongs to a G dominant 7th (G B D F) with an
@@ -42,8 +41,8 @@
 
 (def drone-notes [43 47 50]) ; G2 B2 D3
 
-(defn- define-voices! []
-  (sdef/defsynth :thursday-keys
+(defn- define-voices! [s]
+  (sdef/defsynth s :thursday-keys
     [freq 440
      amp 0.05
      gate 1
@@ -56,7 +55,7 @@
           dark (ug/lpf:ar src 2600.0 1.0 0.0)
           env (ug/env-gen:kr (ug/env-asr 0.01 1.0 2.0) :gate gate :act :free)]
       (ug/out:ar out (ug/pan2:ar (ops/* dark env amp) pan 1.0))))
-  (sdef/defsynth :thursday-sine
+  (sdef/defsynth s :thursday-sine
     [freq 440
      amp 0.045
      gate 1
@@ -67,7 +66,7 @@
                              :act :free)
           sig (ug/sin-osc:ar freq 0 1.0)]
       (ug/out:ar out (ug/pan2:ar (ops/* sig env amp) pan 1.0))))
-  (sdef/defsynth :thursday-drone
+  (sdef/defsynth s :thursday-drone
     [freq 110
      amp 0.025
      gate 1
@@ -80,8 +79,8 @@
                      (ops/* (ug/sin-osc:ar (ops/* freq 2.003) 0 1.0) 0.4))
           dark (ug/lpf:ar src 380.0 1.0 0.0)
           env (ug/env-gen:kr (ug/env-asr 2.0 1.0 8.0) :gate gate :act :free)]
-      (ug/out:ar out (ug/pan2:ar (ops/* dark env trem amp) pan 1.0))))
-  (sdef/defsynth :thursday-verb
+      (ug/out:ar out (ug/pan2:ar (ops/* dark trem env amp) pan 1.0))))
+  (sdef/defsynth s :thursday-verb
     [inbus 16
      out 0
      gate 1]
@@ -107,67 +106,67 @@
          :out-bus 16
          :loop true]))))
 
-(defn- start-drones! []
+(defn- start-drones! [s]
   ;; :out 16 routes the drone through the verb's master fade; without it
   ;; drones hit hardware directly (abrupt start, hard cut at the end).
-  (mapv (fn [m pan] (sdef/synth :thursday-drone :freq (p/midinote-freq m)
+  (mapv (fn [m pan] (sdef/synth s :thursday-drone :freq (p/midinote-freq m)
                                 :out 16 :pan pan))
         drone-notes [-0.2 0.0 0.2]))
 
-(defn- play-all! []
-  (doseq [[nm _ _ _] loops] (p/play nm)))
+(defn- play-all! [clock]
+  (doseq [[nm _ _ _] loops] (p/play clock nm)))
 
-(defn- stop-all! []
-  (p/stop :all))
+(defn- stop-all! [clock]
+  (p/stop clock :all))
 
 (defn start!
   "Non-blocking Thursday for REPL use: boots scsynth, defines voices and
    sequences, starts the 15 loops and the drone. Returns a handle
-   {:server s :verb v :drones [...]} for stop!. Thread-proof: the handle
-   carries the server record and tasks live on the global clock, so no
-   REPL bindings are needed - call stop! on the same thread or any other.
-   Keep in step with live-main (same fade shape)."
+   {:server s :verb v :drones [...]} for stop!. The handle carries the
+   server record and the clock map, so no dynamic state is needed to
+   stop from any thread. Keep in step with live-main (same fade shape)."
   [& {:keys [port] :or {port 57176}}]
-  (let [s (server/make-external-server "thursday" :port port)]
-    (binding [server/*s* (p/connect-server! s :tempo 60)]
-      (define-voices!)
-      (define-sequences!)
-      (let [verb (sdef/synth :thursday-verb :inbus 16)
-            drones (start-drones!)]
-        (play-all!)
-        {:server s :verb verb :drones drones}))))
+  (let [s (server/make-external-server "thursday" :port port)
+        clock (p/start-clock-loop :tempo 60)]
+    (p/connect-server! clock s)
+    (define-voices! s)
+    (define-sequences!)
+    (let [verb (sdef/synth s :thursday-verb :inbus 16)
+          drones (start-drones! s)]
+      (play-all! clock)
+      {:server s :clock clock :verb verb :drones drones})))
 
 (defn stop!
   "Fade Thursday out from handle H (same thread as start!, or any other):
    gates the verb (10s release) under which everything else goes quiet,
    stops all tasks, frees verb and drones, quits the server. Idempotent:
    a second call returns :already-stopped. Returns :done."
-  [{:keys [server verb drones]}]
+  [{:keys [server clock verb drones]}]
   (if-not (and server (server/boot? server))
     :already-stopped
-    (do (binding [server/*s* server]
-          (server/ctrl verb :gate 0)
-          (Thread/sleep 11000)
-          (stop-all!)
-          (server/node-free verb)
-          (doseq [d drones] (server/node-free d)))
+    (do (server/ctrl verb :gate 0)
+        (Thread/sleep 11000)
+        (stop-all! clock)
+        (server/node-free verb)
+        (doseq [d drones] (server/node-free d))
         (server/server-quit server)
         :done)))
 
 (defn- live-main [secs]
-  (let [s (server/make-external-server "thursday" :port 57176)]
-    (binding [server/*s* (p/connect-server! s :tempo 60)]
-      (define-voices!)
-      (define-sequences!)
-      (let [verb (sdef/synth :thursday-verb :inbus 16)
-            drones (start-drones!)]
-        (play-all!)
-        (Thread/sleep (* 1000 (max 0 (- secs 10))))
-        (when (> secs 10) (server/ctrl verb :gate 0))
-        (Thread/sleep (if (> secs 10) 10000 (* 1000 secs)))
-        (stop-all!)
-        (server/node-free verb)
-        (doseq [d drones] (server/node-free d))))
+  (let [s (server/make-external-server "thursday" :port 57176)
+        clock (p/start-clock-loop :tempo 60)]
+    (p/connect-server! clock s)
+    (define-voices! s)
+    (define-sequences!)
+    (let [verb (sdef/synth s :thursday-verb :inbus 16)
+          drones (start-drones! s)]
+      (play-all! clock)
+      (Thread/sleep (* 1000 (max 0 (- secs 10))))
+      (when (> secs 10) (server/ctrl verb :gate 0))
+      (Thread/sleep (if (> secs 10) 10000 (* 1000 secs)))
+      (stop-all! clock)
+      (server/node-free verb)
+      (doseq [d drones] (server/node-free d)))
     (server/server-quit s)
     (println :done)))
 
@@ -181,23 +180,23 @@
                          (take-while #(<= (:beat %) end-beat)
                            (p/play-take (p/pdef nm) 100000 dbg)))
                        loops))]
-    (server/with-rendering [out :sr 44100 :pad (+ (double secs) 12.0)]
-      (define-voices!)
-      (let [verb (sdef/synth :thursday-verb :inbus 16)
-            drones (start-drones!)
-            be (p/make-cl-collider-backend server/*s*)]
+    (server/with-rendering [nrt out :sr 44100 :pad (+ (double secs) 12.0)]
+      (define-voices! nrt)
+      (let [verb (sdef/synth nrt :thursday-verb :inbus 16)
+            drones (start-drones! nrt)
+            be (p/make-cl-collider-backend nrt)]
         (doseq [{:keys [beat event]} evts]
           (p/play-event be (assoc event :tempo bps) (double beat)))
-        (server/at (double (max 0 (- secs 10)))
-          (server/ctrl verb :gate 0))
-        (server/at (double secs)
-          (server/node-free verb)
-          (doseq [d drones] (server/node-free d)))))))
+        (server/send-bundle nrt (double (max 0 (- secs 10)))
+          [(server/ctrl-msg verb :gate 0)])
+        (server/send-bundle nrt (double secs)
+          (into [(server/node-free-msg verb)]
+                (map server/node-free-msg drones)))))))
 
 (defn silence []
-  ;; Find every live scsynth on this machine and silence it. No bindings
-  ;; or registry needed - works from a bare process when stop/panic in
-  ;; another JVM can't reach the sound.
+  ;; Find every live scsynth on this machine and silence it. No dynamic
+  ;; state or registry needed - works from a bare process when stop/panic
+  ;; in another JVM can't reach the sound.
   (let [live (server/find-live-servers)]
     (println :live-servers live)
     (doseq [p live] (server/panic-port! p))

@@ -35,14 +35,19 @@
    :ugen-plugins-path default-plugin-paths
    :device nil
    :input-stream-enabled nil
-   :output-stream-enabled nil})
+   :output-stream-enabled nil
+   :sc-synth-program "scsynth"
+   :plugin-paths nil
+   :synthdefs-path "~/.local/share/SuperCollider/synthdefs/"
+   :auto-silence nil})
 
 (defrecord ServerOptions [num-control-bus num-audio-bus num-input-bus num-output-bus
                           block-size hardware-buffer-size hardware-samplerate
                           num-sample-buffers max-num-nodes max-num-synthdefs
                           realtime-mem-size num-wire-buffers num-random-seeds
                           load-synthdefs-p publish-to-rendezvous-p max-logins verbosity
-                          ugen-plugins-path device input-stream-enabled output-stream-enabled])
+                          ugen-plugins-path device input-stream-enabled output-stream-enabled
+                          sc-synth-program plugin-paths synthdefs-path auto-silence])
 
 (defn make-server-options
    "Defaults merged with `overrides` map. Input defaults OFF (-i 0,

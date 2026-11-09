@@ -34,8 +34,8 @@
     (ops/* rin rout)))
 
 (defn -main [& _]
-  (let [f (server/with-rendering ["/tmp/ascent-homage.aiff" :sr 44100 :pad dur]
-            (sdef/play
+  (let [f (server/with-rendering [nrt "/tmp/ascent-homage.aiff" :sr 44100 :pad dur]
+            (sdef/play nrt
               (let [t (ug/line:kr 0 1 dur)
                     arc (ug/env-gen:kr (ug/env arc-levels arc-times) :act :no-action)
                     cutoff (ops/+ 250 (ops/* 2000 arc))

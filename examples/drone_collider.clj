@@ -37,8 +37,8 @@
 
 (defn define-voice!
   "One :drone-collider def. Module numbering follows the SC source."
-  []
-  (sdef/defsynth :drone-collider
+  [s]
+  (sdef/defsynth s :drone-collider
     [out 0
      voiceid 1
      attack 80
@@ -136,21 +136,20 @@
 
 (defn -main [& [secs-arg]]
   (let [secs (if secs-arg (Long/parseLong secs-arg) 0)
-        s (p/setup-performance! :port 57140 :tempo bpm :name "example")]
-    (binding [server/*s* s]
-      (define-voice!)
-      (let [nodes (mapv #(sdef/synth :drone-collider :voiceid %)
-                        (range 1 (inc voicesnum)))
-            levels (atom knob-defaults)]
-        (if (pos? secs)
-          (do (Thread/sleep (* secs 1000))
-              (server/server-quit server/*s*))
-          (let [quit! (let [done (atom false)]
-                        (fn [] (when (compare-and-set! done false true)
-                               (server/server-quit s))))]
-            (println :interactive-type-quit-to-stop)
-            (.addShutdownHook (Runtime/getRuntime)
-              (Thread. ^Runnable quit!))
-            (control-loop nodes levels)
-            (quit!)))))
+        {:keys [server]} (p/setup-performance! :port 57140 :tempo bpm :name "example")]
+    (define-voice! server)
+    (let [nodes (mapv #(sdef/synth server :drone-collider :voiceid %)
+                      (range 1 (inc voicesnum)))
+          levels (atom knob-defaults)]
+      (if (pos? secs)
+        (do (Thread/sleep (* secs 1000))
+            (server/server-quit server))
+        (let [quit! (let [done (atom false)]
+                      (fn [] (when (compare-and-set! done false true)
+                             (server/server-quit server))))]
+          (println :interactive-type-quit-to-stop)
+          (.addShutdownHook (Runtime/getRuntime)
+            (Thread. ^Runnable quit!))
+          (control-loop nodes levels)
+          (quit!))))
     (println :done)))

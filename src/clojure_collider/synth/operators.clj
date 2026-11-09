@@ -34,10 +34,9 @@
      (let [ctor# (fn [cls# sp# x#]
                    (if (number? x#)
                      (~basic-fn x#)
-                     (ugen/add-to-synth
-                      (ugen/construct "UnaryOpUGen" (ugen/rate x#)
-                                      'unary-operator
-                                      identity :bipolar sp# [x#]))))]
+                     (ugen/construct "UnaryOpUGen" (ugen/rate x#)
+                                     'unary-operator
+                                     identity :bipolar sp# [x#])))]
        (ugen/multinew ctor# 'unary-operator ~special-index in#))))
 
 (defmacro def-binary-op
@@ -56,10 +55,9 @@
        (let [~ctor (fn [~cls ~sp ~a ~b]
                      (cond (and (number? ~a) (number? ~b)) (~basic-fn ~a ~b)
                            ~@arms
-                           :else (ugen/add-to-synth
-                                  (ugen/construct "BinaryOpUGen" (binary-rate ~a ~b)
-                                                  'binary-operator
-                                                  identity :bipolar ~sp [~a ~b]))))]
+                           :else (ugen/construct "BinaryOpUGen" (binary-rate ~a ~b)
+                                                 'binary-operator
+                                                 identity :bipolar ~sp [~a ~b])))]
          (ugen/multinew ~ctor 'binary-operator ~special-index ~in1 ~in2)))))
 
 ;; -- unary table (name, numeric fn, SC special-index) ------------------------
@@ -261,8 +259,7 @@
               :else
               (let [[x y z] (if (can-be-mul-add i m a) [i m a] [m i a])]
                 (if (can-be-mul-add x y z)
-                  (ugen/add-to-synth
-                   (ugen/construct "MulAdd" rate cls identity :bipolar 0 [x y z]))
+                  (ugen/construct "MulAdd" rate cls identity :bipolar 0 [x y z])
                   (add (mul i m) a))))))
     'muladd in mulv addv)))
 
@@ -275,8 +272,7 @@
            (num-eq? b 0.0) (add a c)
            (num-eq? a 0.0) (add b c)
            :else (let [args (ugen/sort-by-rate-desc [a b c])]
-                   (ugen/add-to-synth
-                    (ugen/construct "Sum3" (ugen/rate [a b c]) cls identity :bipolar 0 args)))))
+                   (ugen/construct "Sum3" (ugen/rate [a b c]) cls identity :bipolar 0 args))))
    'sum3 in0 in1 in2))
 
 (defn sum4 [in0 in1 in2 in3]
@@ -287,8 +283,7 @@
            (num-eq? c 0.0) (sum3 a b d)
            (num-eq? d 0.0) (sum3 a b c)
            :else (let [args (ugen/sort-by-rate-desc [a b c d])]
-                   (ugen/add-to-synth
-                    (ugen/construct "Sum4" (ugen/rate [a b c d]) cls identity :bipolar 0 args)))))
+                   (ugen/construct "Sum4" (ugen/rate [a b c d]) cls identity :bipolar 0 args))))
    'sum4 in0 in1 in2 in3))
 
 ;; -- composition helpers ----------------------------------------------------------

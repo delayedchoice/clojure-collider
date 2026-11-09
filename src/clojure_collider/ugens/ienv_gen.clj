@@ -31,12 +31,11 @@
   ([envelope index mul add]
    (op/madd (ugen/unbubble
              (ugen/multinew
-              ;; splice BEFORE add: records are values, so the graph must store
-              ;; the processed copy (same as env-gen*).
+              ;; splice here: records are values, so return the processed copy
+              ;; (same as env-gen*). Collection happens at build.
               (fn [_ idx arr]
-                (ugen/add-to-synth
-                 (envgen/process-env
-                  (ugen/construct "IEnvGen" :audio 'ugen nil :bipolar 0 [idx arr]))))
+                (envgen/process-env
+                 (ugen/construct "IEnvGen" :audio 'ugen nil :bipolar 0 [idx arr])))
               nil index (as-array-for-interpolation envelope)))
             mul add)))
 
@@ -47,11 +46,10 @@
   ([envelope index mul add]
    (op/madd (ugen/unbubble
              (ugen/multinew
-              ;; splice BEFORE add: records are values, so the graph must store
-              ;; the processed copy (same as env-gen*).
+              ;; splice here: records are values, so return the processed copy
+              ;; (same as env-gen*). Collection happens at build.
               (fn [_ idx arr]
-                (ugen/add-to-synth
-                 (envgen/process-env
-                  (ugen/construct "IEnvGen" :control 'ugen nil :bipolar 0 [idx arr]))))
+                (envgen/process-env
+                 (ugen/construct "IEnvGen" :control 'ugen nil :bipolar 0 [idx arr])))
               nil index (as-array-for-interpolation envelope)))
             mul add)))

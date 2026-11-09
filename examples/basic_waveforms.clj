@@ -35,8 +35,8 @@
 (defn define-voice!
   "The SC \\basicwaveforms def: Select over silence/sine/saw/pulse/tri
    under a retriggerable attack-sustain gate envelope, out stereo."
-  []
-  (sdef/defsynth :basicwaveforms
+  [s]
+  (sdef/defsynth s :basicwaveforms
     [freq 65.41
      amp 0.1
      width 0.5
@@ -131,12 +131,11 @@
                 (free!)
                 (with-echo #(do (s/selection! picker "off")
                                 (s/config! load-btn :selected? true)))
-                (binding [server/*s* s]
-                  (reset! node (sdef/synth :basicwaveforms
-                                            :freq (:freq @levels)
-                                            :amp (:amp @levels)
-                                            :width (:width @levels)
-                                            :which 0 :t-trig 0)))
+                (reset! node (sdef/synth s :basicwaveforms
+                                         :freq (:freq @levels)
+                                         :amp (:amp @levels)
+                                         :width (:width @levels)
+                                         :which 0 :t-trig 0))
                 (send! :which 0))
         unload! (fn []
                   (free!)
@@ -180,7 +179,6 @@
 (defn -main [& _]
   (let [s (server/make-external-server "basic-waveforms" :port 57141)]
     (server/server-boot s)
-    (binding [server/*s* s]
-      (define-voice!))
+    (define-voice! s)
     (start! s)
     (println :playing-close-window-to-quit)))

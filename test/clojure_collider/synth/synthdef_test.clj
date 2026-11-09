@@ -4,7 +4,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [clojure-collider.synth.ugen :as ugen]
             [clojure-collider.synth.synthdef :as synthdef]
-            [clojure-collider.synth.control :as ctl :refer [with-controls]]
+            [clojure-collider.synth.control :as ctl]
             [clojure-collider.synth.operators :as ops]
             [clojure-collider.osc.encode :as enc]
             [clojure-collider.ugens.env-gen :as e]
@@ -15,12 +15,10 @@
            [java.nio.file Files Paths]))
 
 (defn- build [name f]
-  ;; *synthdef* evaluates to the atom; @ derefs it to the map.
-  (binding [ugen/*synthdef* (synthdef/make-synthdef name)]
-    (f)
-    (let [a ugen/*synthdef*]
-      (synthdef/build-synthdef a)
-      @a)))
+  (let [a (synthdef/make-synthdef name)
+        root (f)]
+    (synthdef/build-synthdef a root)
+    @a))
 (deftest sum-fusion-keeps-consumers
   (testing "4-voice sum fuses twice (Sum3 then Sum4); the outer consumer
    must follow to the replacement. Identity-based rewrite missed the
@@ -55,8 +53,9 @@
                    (fn []
                      (let [a (osc/sin-osc:ar 440 0 1 0)
                            b (osc/sin-osc:ar 441 0 1 0)
-                           _c (osc/saw:ar a 1 0)]
-                       (osc/saw:ar b 1 0))))]
+                           c1 (osc/saw:ar a 1 0)
+                           c2 (osc/saw:ar b 1 0)]
+                       [c1 c2])))]
       (is (= ["SinOsc" "Saw" "SinOsc" "Saw"] (mapv :name (:children s))))
       (is (= [[0 0]] (ugen/input-spec (second (:children s)) s)))
       (is (= [[2 0]] (ugen/input-spec (nth (:children s) 3) s))))))
@@ -115,9 +114,10 @@
     (let [s (build "reorder"
                    (fn []
                      (let [a (osc/sin-osc:ar 440 0 1 0)
-                           b (osc/sin-osc:ar 441 0 1 0)]
-                       (osc/saw:ar a 1 0)
-                       (osc/saw:ar b 1 0))))]
+                           b (osc/sin-osc:ar 441 0 1 0)
+                           s1 (osc/saw:ar a 1 0)
+                           s2 (osc/saw:ar b 1 0)]
+                       [s1 s2])))]
       (cl-bytes "cl-reorder.scsyndef" s))))
 
 (deftest golden-diamond-bytes
@@ -130,10 +130,11 @@
 
 (deftest golden-dsine-bytes
   (testing "cl-dsine.scsyndef: defsynth control + Out path match CL"
-    (let [s (build "dsine"
-                   (fn []
-                     (with-controls [freq 440]
-                       (io/out:ar 0 (osc/sin-osc:ar freq 0 1 0.2)))))]
+    (let [m (synthdef/make-synthdef "dsine")
+          root (ctl/with-controls m [freq 440]
+                 (io/out:ar 0 (osc/sin-osc:ar freq 0 1 0.2)))
+          _ (synthdef/build-synthdef m root)
+          s @m]
       (cl-bytes "cl-dsine.scsyndef" s))))
 
 (deftest golden-varlag-bytes
@@ -147,27 +148,27 @@
 (deftest golden-playtail-bytes
   (testing "cl-playtail.scsyndef: play fade tail (EnvGen gate, Sum3 trig,
    lagged gain outlets) matches CL"
-    (let [s (build "playtail"
-                   (fn []
-                     (let [result (osc/sin-osc:ar 440 0 1 0.2)
-                           [dt buses gate gain lag]
-                           (ctl/make-control
-                            ugen/*synthdef*
-                            [{:sym 'fade :name "fade" :value (float 0.02)
-                              :rate nil :lag nil}
-                             {:sym 'out-bus :name "out-bus" :value (float 0)
-                              :rate nil :lag nil}
-                             {:sym 'gate :name "gate" :value 1.0
-                              :rate nil :lag nil}
-                             {:sym 'gain :name "gain" :value (float 0.5)
-                              :rate nil :lag nil}
-                             {:sym 'lag :name "lag" :value (float 1.0)
-                              :rate nil :lag nil}])
-                           start-val (ops/<= dt 0)
-                           env (e/env-gen:kr
-                                (e/env [start-val 1 0] [1 1] :lin 1)
-                                :gate gate :time-scale dt :act :free)
-                           result2 (ops/* env result)]
-                       (io/out:ar buses
-                                  (ops/* result2 (flt/var-lag:kr gain lag))))))]
-      (cl-bytes "cl-playtail.scsyndef" s))))
+    (let [m (synthdef/make-synthdef "playtail")
+          root (let [result (osc/sin-osc:ar 440 0 1 0.2)
+                     [dt buses gate gain lag]
+                     (ctl/make-control
+                      m
+                      [{:sym 'fade :name "fade" :value (float 0.02)
+                        :rate nil :lag nil}
+                       {:sym 'out-bus :name "out-bus" :value (float 0)
+                        :rate nil :lag nil}
+                       {:sym 'gate :name "gate" :value 1.0
+                        :rate nil :lag nil}
+                       {:sym 'gain :name "gain" :value (float 0.5)
+                        :rate nil :lag nil}
+                       {:sym 'lag :name "lag" :value (float 1.0)
+                        :rate nil :lag nil}])
+                     start-val (ops/<= dt 0)
+                     env (e/env-gen:kr
+                          (e/env [start-val 1 0] [1 1] :lin 1)
+                          :gate gate :time-scale dt :act :free)
+                     result2 (ops/* env result)]
+                 (io/out:ar buses
+                            (ops/* result2 (flt/var-lag:kr gain lag))))]
+      (synthdef/build-synthdef m root)
+      (cl-bytes "cl-playtail.scsyndef" @m))))

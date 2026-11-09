@@ -12,10 +12,11 @@
      :loop  nil}                ; :loop override flag, kept for the clock
 
   Each pair value is turned into a child stream once, when the pbind
-  stream is built. Each step pulls every child left-to-right with
-  `patterns.event/*event*` bound to the partially built event map, so
-  later keys can read earlier ones. ANY child yielding end-of-pattern
-  ends the whole pbind step.
+  stream is built. Each step pulls every child left-to-right, passing
+  the partially built event map explicitly: fn values are called as
+  `(f partial-ev)` so later keys can read earlier ones (the partial
+  map is also IFn, so `(ev :dur)` works). ANY child yielding
+  end-of-pattern ends the whole pbind step.
 
   Special pair keys:
   - `:embed` with a plain map splices that map's entries into the pairs
@@ -23,8 +24,6 @@
     yielded map is merged into the event via `combine-events`.
   - `:loop` is stored on the pattern map as a loop override for the
     clock slice (replay policy); it does not change stepping.
-  - Plain `(fn [ev] ...)` values are called each step with the partial
-    event map (which is also an IFn, so `(e :dur)` works).
   - `prest` markers pulled for a key set that key to the marker's value
     and force `:type :rest` (silence; the backend checks
     `(= :rest (:type ev))`).
@@ -41,8 +40,8 @@
 
 (set! *warn-on-reflection* true)
 
-;; End-of-pattern keyword (binding contract). Spelled literally so this ns
-;; never depends on which var name patterns.util gives it.
+;; End-of-pattern keyword. Spelled literally so this ns never depends on
+;; which var name patterns.util gives it.
 (def ^:private eop
   :patterns.util/eop)
 
@@ -196,13 +195,9 @@
            acc {}]
       (if (empty? cs)
         [(finalize-event acc) st]
-        ;; NOTE: the pull stays inside `binding` but every `recur` sits
-        ;; outside it: `binding` expands to try/finally, which `recur`
-        ;; may not cross.
         (let [[k child] (first cs)
               more      (rest cs)
-              v         (binding [event/*event* acc]
-                          (if (fn? child) (child acc) (p/pnext! child)))]
+              v         (if (fn? child) (child acc) (p/pnext! child))]
           (cond
             (p/eop? v)
             eop

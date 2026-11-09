@@ -7,6 +7,9 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+ ### 2026-11-09 — thread locals eliminated (tagged `thread-local` before)
+ - Every `^:dynamic` is gone: `server` is always the first arg (node/buffer/bus/group fns derive it from the record), patterns fns take `clock` first (clocks now carry a `:server` atom set by `connect-server!`/`setup-performance!`), `at`/`at-beat`/`at-task`/`with-async` deleted in favor of `send-bundle` + `synth-msg`/`ctrl-msg`/`node-free-msg` constructors, `with-rendering [[sym out & opts]]` binds lexically, `defsynth`/`play`/`proxy` take server first (play bodies' `with-controls` get the atom threaded by macroexpansion), synthdef graphs build by two-phase root collection (byte-identical goldens prove it), rng/scale defaults are plain atoms. `sdef/defsynth` accepts runtime names; `out:ar`-family and `poll`/`free-self`/`pause-self` now return the built unit (their old `in`-passthrough silently dropped the unit from the graph). Examples/REPL use handles, never bindings.
+ - Status: decided
  ### 2026-11-08 — `panic!` (immediate all-silence)
  - `p/panic!` routes through `server/panic-all!` (live servers + registry-port spray). Kill command is `/g_deepFree 0` (groups survive, no rebuild). `(server/panic-port! 57120)` for foreign-JVM servers; beyond that `killall scsynth`. `server-boot` installs a JVM shutdown hook (`cleanup-server`, spawned servers only) so Ctrl+C no longer orphans ringing scsynths - the likely cause of the "panic not working" reports. `panic!`/`panic-all!` print what they silenced (`:panic-silenced`, `:panic-all`, `:panic-tasks-dropped`); silence in the output means stale code - re-require.
  - Status: decided

@@ -30,10 +30,11 @@
 (def bpm 120)
 
 (defn define-voice!
-  "Define :als + :mix-limiter on the current *s* (server or NRT score).
-  Must run after boot / inside with-rendering."
-  []
-  (sdef/defsynth :als
+  "Define :als + :mix-limiter on server S (live server or NRT score).
+  Must run after boot / inside with-rendering: definitions only reach
+  the synthesis engine when a server is listening."
+  [s]
+  (sdef/defsynth s :als
     [freq 440
      atk 0.005
      rel 0.3
@@ -87,11 +88,12 @@
           sig (ug/leak-dc:ar sig)
           sig (ug/hpf:ar sig 32)]
       (ug/out:ar out (ug/limiter:ar sig 0.1))))
-  (sdef/defsynth :mix-limiter [bus 16
+  (sdef/defsynth s :mix-limiter [bus 16
                                  amp 1.0]
     (let [sig (ug/in:ar bus 2)
           sig (ops/* sig 0.5 amp)]
       (ug/out:ar 0 (ug/compander:ar sig sig 0.7 1.0 0.05 0.001 0.1)))))
+
 (def chords
   [[44 20 21 27]
    [32 20 39 40]
@@ -100,48 +102,45 @@
    [32 44 51 20 28]])
 
 (defn create-phrase [seed]
-  ;; Seed the ROOT rng: pulls happen on the scheduler thread (raw Thread,
-  ;; no binding conveyance), which sees only the root value. The binding
-  ;; keeps direct (calling-thread) pulls deterministic too.
+  ;; Seed the shared pattern RNG: pulls also happen on the scheduler
+  ;; thread, which sees the same global atom as the calling thread.
   (u/seed-rng! seed)
-  (binding [u/*rng* (java.util.Random. seed)]
-    (let [stutter-n (p/as-pstream (p/pwhite 2 7))
-          dev-white (p/as-pstream (p/pwhite -0.25 0.0))
-          lp-white (p/as-pstream (p/pwhite 3.0 9.0))
-          harm (p/as-pstream (p/pexprand 1 9))
-          n-of (fn [_] (* 2 (Math/round (double (p/pnext! stutter-n)))))]
-      (p/pbind
-        :instrument :als
-        :dur (p/pwhite 0.1 10.0)
-        :gain (p/pexprand 0.001 1.5)
-        :transition-time (p/prand [0.875 2.0])
-        :mod-index (p/pwhite 0.00001 3.0)
-        :phase-mod-index (p/pwhite 0.00001 0.1)
-        ;; One picked chord repeated N events in a row (N re-drawn per pick).
-        :midinote (p/repeat-each (p/prand chords) n-of)
-        :harmonic (p/pfunc #(Math/round (double (p/pnext! harm))))
-        ;; Per-event reads of sibling keys (upstream Pkey).
-        :freq-deviation (fn [ev] (mapv #(* (:harmonic ev)
-                                           (ops/midicps (+ (p/pnext! dev-white) %)))
-                                       (:midinote ev)))
-        :atk (p/pwhite 15.0 45.0)
-        :hold (p/pwhite 4.0 14.0)
-        :rel (p/pwhite 30.0 60.0)
-        :amp (fn [ev] (* 0.75 (/ 1 (:harmonic ev))))
-        :lpf-freq (fn [ev] (mapv #(* (p/pnext! lp-white)
-                                     (* (:harmonic ev) (ops/midicps %)))
-                                 (:midinote ev)))
-        :resonz-q (p/pwhite 0.001 1.0)
-        :resonance (p/pwhite 0.6 0.05)
-        :pan (p/prand [(p/pwhite -1.0 -0.5 1) (p/pwhite 0.5 1.0 1)])
-        :type :note
-        :out-bus 16))))
+  (let [stutter-n (p/as-pstream (p/pwhite 2 7))
+        dev-white (p/as-pstream (p/pwhite -0.25 0.0))
+        lp-white (p/as-pstream (p/pwhite 3.0 9.0))
+        harm (p/as-pstream (p/pexprand 1 9))
+        n-of (fn [_] (* 2 (Math/round (double (p/pnext! stutter-n)))))]
+    (p/pbind
+      :instrument :als
+      :dur (p/pwhite 0.1 10.0)
+      :gain (p/pexprand 0.001 1.5)
+      :transition-time (p/prand [0.875 2.0])
+      :mod-index (p/pwhite 0.00001 3.0)
+      :phase-mod-index (p/pwhite 0.00001 0.1)
+      ;; One picked chord repeated N events in a row (N re-drawn per pick).
+      :midinote (p/repeat-each (p/prand chords) n-of)
+      :harmonic (p/pfunc #(Math/round (double (p/pnext! harm))))
+      ;; Per-event reads of sibling keys (upstream Pkey).
+      :freq-deviation (fn [ev] (mapv #(* (:harmonic ev)
+                                         (ops/midicps (+ (p/pnext! dev-white) %)))
+                                     (:midinote ev)))
+      :atk (p/pwhite 15.0 45.0)
+      :hold (p/pwhite 4.0 14.0)
+      :rel (p/pwhite 30.0 60.0)
+      :amp (fn [ev] (* 0.75 (/ 1 (:harmonic ev))))
+      :lpf-freq (fn [ev] (mapv #(* (p/pnext! lp-white)
+                                   (* (:harmonic ev) (ops/midicps %)))
+                               (:midinote ev)))
+      :resonz-q (p/pwhite 0.001 1.0)
+      :resonance (p/pwhite 0.6 0.05)
+      :pan (p/prand [(p/pwhite -1.0 -0.5 1) (p/pwhite 0.5 1.0 1)])
+      :type :note
+      :out-bus 16)))
 
-(defn player [seed]
-  (p/stop)
-  (p/start-clock-loop :tempo bpm)
+(defn player [clock seed]
+  (p/stop clock :all)
   (p/pdef :alspat (create-phrase seed))
-  (p/play :alspat))
+  (p/play clock :alspat))
 
 (defn bounce
   "Deterministic offline render of the phrase to OUTF (same SEED ->
@@ -160,17 +159,17 @@
         _ (p/play-take (create-phrase seed) 100000 dbg)
         evts (take-while #(<= (:beat %) end-beat) (p/captured-events dbg))
         total (+ (double secs) (double fade) 2.0)]
-    (server/with-rendering [out :sr 44100 :pad total]
-      (define-voice!)
-      (let [master (sdef/synth :mix-limiter :bus 16 :pos :tail)
-            be (p/make-cl-collider-backend server/*s*)]
+    (server/with-rendering [nrt out :sr 44100 :pad total]
+      (define-voice! nrt)
+      (let [master (sdef/synth nrt :mix-limiter :bus 16 :pos :tail)
+            be (p/make-cl-collider-backend nrt)]
         (doseq [{:keys [beat event]} evts]
           (p/play-event be
                         (assoc event :rseed-trig 1 :rseed seed)
                         (* (double beat) (/ 60.0 bps))))
         (doseq [i (range 20 0 -1)]
-          (server/at (+ (double secs) (* (double fade) (/ (- 20 i) 20.0)))
-            (server/ctrl master :amp (/ (dec i) 20.0))))))
+          (server/send-bundle nrt (+ (double secs) (* (double fade) (/ (- 20 i) 20.0)))
+            [(server/ctrl-msg master :amp (/ (dec i) 20.0))]))))
     out))
 
 (declare -live-main)
@@ -189,7 +188,7 @@
   (then exits or hangs on the bad device). Returns [[index name] ...]."
   []
   (let [pb (doto (ProcessBuilder. ^java.util.List
-                                  [server/*sc-synth-program* "-u" "57999"
+                                  ["scsynth" "-u" "57999"
                                    "-H" "__no-such-device__"])
              (.redirectErrorStream true))
         proc (.start pb)]
@@ -229,21 +228,22 @@
         secs (if secs-arg (Long/parseLong secs-arg) 45)
         fade (if fade-arg (Long/parseLong fade-arg) 5)
         device (resolve-device device-arg)
-        _ (when device (println :device device))]
-    (binding [server/*s* (p/setup-performance!
-                           :seed seed :port 57138 :tempo bpm :name "example"
-                           :options (opts/make-server-options
-                                     {:realtime-mem-size 65536
-                                      :max-num-nodes 4096
-                                      :device device}))]
-      (define-voice!)
-      (let [master (sdef/synth :mix-limiter :bus 16 :pos :tail)]
-        (player seed)
-        (Thread/sleep (* secs 1000))
-        (p/end :alspat)
-        (doseq [i (range 20 0 -1)]
-          (server/ctrl master :amp (/ (dec i) 20.0))
-          (Thread/sleep (long (/ (* fade 1000) 20))))
-        (Thread/sleep 2000)
-        (server/server-quit server/*s*)))
+        _ (when device (println :device device))
+        {:keys [server clock]}
+        (p/setup-performance!
+          :seed seed :port 57138 :tempo bpm :name "example"
+          :options (opts/make-server-options
+                     {:realtime-mem-size 65536
+                      :max-num-nodes 4096
+                      :device device}))]
+    (define-voice! server)
+    (let [master (sdef/synth server :mix-limiter :bus 16 :pos :tail)]
+      (player clock seed)
+      (Thread/sleep (* secs 1000))
+      (p/end clock :alspat)
+      (doseq [i (range 20 0 -1)]
+        (server/ctrl master :amp (/ (dec i) 20.0))
+        (Thread/sleep (long (/ (* fade 1000) 20))))
+      (Thread/sleep 2000)
+      (server/server-quit server))
     (println :done)))

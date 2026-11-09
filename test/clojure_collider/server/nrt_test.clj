@@ -15,16 +15,20 @@
              [4294967296 [["/s_new" "x" 1000 0 1]]]]
            @(:streams s)) "ticks are round(time * 2^32), no epoch")))
 
-(deftest at-collects-timestamped
+(deftest explicit-bundle-collects-timestamped
   (let [s (server/make-nrt-server)
         node (server/->Node s 1001 :head 1 "test")]
-    (binding [server/*s* s]
-      (server/at 2.5 (server/node-free node)))
+    (server/send-bundle s 2.5 [(server/node-free-msg node)])
     (is (= [[10737418240 [["/n_free" 1001]]]] @(:streams s)))))
+(deftest ctrl-msg-shape
+  (let [s (server/make-nrt-server)
+        node (server/->Node s 1001 :head 1 "test")]
+    (is (= [15 1001 "freq" 440.0] (server/ctrl-msg node :freq 440)))
+    (is (= ["/n_free" 1001] (server/node-free-msg node)))))
 (deftest render-aiff
   (let [out (try
-              (server/with-rendering ["/tmp/nrt-test.aiff" :sr 44100 :pad 0.5]
-                (sdef/play (uosc/sin-osc:ar 440 0 0.2)))
+              (server/with-rendering [s "/tmp/nrt-test.aiff" :sr 44100 :pad 0.5]
+                (sdef/play s (uosc/sin-osc:ar 440 0 0.2)))
               (catch Exception e (println "SKIP nrt render:" (.getMessage e)) nil))]
     (when out
       (try

@@ -26,7 +26,7 @@
 (defn event
   "Create an event map from key/value pairs.
 
-  See also: `event-value`, `e`, `*event*`."
+  See also: `event-value`."
   [& kvs]
   (apply hash-map kvs))
 
@@ -39,10 +39,6 @@
   "Get the value of K in event EV without any conversion or default."
   [ev k]
   (get ev k))
-
-(def ^:dynamic *event*
-  "Dynamically bound current event for the `e` sugar."
-  nil)
 
 ;; -- resolution --------------------------------------------------------------
 
@@ -98,7 +94,7 @@
   Vector raw values resolve element-wise. Yields nil for the end-of-pattern
   marker or unknown keys with no stored value.
 
-  See also: `event`, `e`, `raw-event-value`."
+  See also: `event`, `raw-event-value`."
   [ev k]
   (cond
     (= ev u/eop) nil
@@ -143,11 +139,6 @@
                   b (base-freq ev)]
               (vmap #(/ % b) f))
       (get ev k))))
-
-(defn e
-  "Syntax sugar; like `event-value' but always reads from `*event*`."
-  [k]
-  (event-value *event* k))
 
 ;; -- compare, combine, copy, split -------------------------------------------
 

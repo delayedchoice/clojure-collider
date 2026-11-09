@@ -13,10 +13,11 @@ A pbind map looks like
    :loop  nil}                ; :loop override flag, kept for the clock
 
 Each pair value is turned into a child stream once, when the pbind
-stream is built. Each step pulls every child left-to-right with
-`patterns.event/*event*` bound to the partially built event map, so
-later keys can read earlier ones. ANY child yielding end-of-pattern
-ends the whole pbind step.
+stream is built. Each step pulls every child left-to-right, passing
+the partially built event map explicitly: fn values are called as
+`(f partial-ev)` so later keys can read earlier ones (the partial
+map is also IFn, so `(ev :dur)` works). ANY child yielding
+end-of-pattern ends the whole pbind step.
 
 Special pair keys:
 - `:embed` with a plain map splices that map's entries into the pairs
@@ -24,8 +25,6 @@ Special pair keys:
   yielded map is merged into the event via `combine-events`.
 - `:loop` is stored on the pattern map as a loop override for the
   clock slice (replay policy); it does not change stepping.
-- Plain `(fn [ev] ...)` values are called each step with the partial
-  event map (which is also an IFn, so `(e :dur)` works).
 - `prest` markers pulled for a key set that key to the marker's value
   and force `:type :rest` (silence; the backend checks
   `(= :rest (:type ev))`).
@@ -37,19 +36,19 @@ Deferred (upstream `pbind` wrap keys): `:pfor :psync :pr :pn
 throws with a `:deferred` marker; likewise `pb`'s arithmetic
 auto-translation (`+` -&gt; `p+` etc.) is NOT ported. Both are documented
 here so a later slice can pick them up without guessing.</pre></div><div class="public anchor" id="var-all-pdefs"><h3>all-pdefs</h3><div class="usage"><code>(all-pdefs)</code></div><div class="doc"><pre class="plaintext">Snapshot of the name -&gt; pattern registry map.
-</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L89">view source</a></div></div><div class="public anchor" id="var-find-pdef"><h3>find-pdef</h3><div class="usage"><code>(find-pdef name)</code></div><div class="doc"><pre class="plaintext">Return the pattern registered under NAME, or nil.
-</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L84">view source</a></div></div><div class="public anchor" id="var-pb"><h3>pb</h3><h4 class="type">macro</h4><div class="usage"><code>(pb name &amp; pairs)</code></div><div class="doc"><pre class="plaintext">Convenience macro over `pdef`/`pbind` (upstream `pb`, minus arithmetic
+</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L88">view source</a></div></div><div class="public anchor" id="var-find-pdef"><h3>find-pdef</h3><div class="usage"><code>(find-pdef name)</code></div><div class="doc"><pre class="plaintext">Return the pattern registered under NAME, or nil.
+</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L83">view source</a></div></div><div class="public anchor" id="var-pb"><h3>pb</h3><h4 class="type">macro</h4><div class="usage"><code>(pb name &amp; pairs)</code></div><div class="doc"><pre class="plaintext">Convenience macro over `pdef`/`pbind` (upstream `pb`, minus arithmetic
 auto-translation, which is deferred). With a single VALUE arg, registers
 it: `(pb :name pattern-map)`. Otherwise builds and registers a pbind:
-`(pb :name :k v ...)`. Returns the registered pattern.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L166">view source</a></div></div><div class="public anchor" id="var-pbind"><h3>pbind</h3><div class="usage"><code>(pbind &amp; pairs)</code></div><div class="doc"><pre class="plaintext">Build an event pattern from key/value PAIRS. Each value becomes a child
+`(pb :name :k v ...)`. Returns the registered pattern.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L165">view source</a></div></div><div class="public anchor" id="var-pbind"><h3>pbind</h3><div class="usage"><code>(pbind &amp; pairs)</code></div><div class="doc"><pre class="plaintext">Build an event pattern from key/value PAIRS. Each value becomes a child
 stream (plain `(fn [ev] ...)` values are called per step instead); each
 step yields one event map. See ns docstring for `:embed`, `:loop`,
-`prest`, deferred keys, and end conditions.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L109">view source</a></div></div><div class="public anchor" id="var-pdef"><h3>pdef</h3><div class="usage"><code>(pdef name)</code><code>(pdef name pattern)</code></div><div class="doc"><pre class="plaintext">Register PATTERN under NAME, returning PATTERN. Called with just NAME,
+`prest`, deferred keys, and end conditions.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L108">view source</a></div></div><div class="public anchor" id="var-pdef"><h3>pdef</h3><div class="usage"><code>(pdef name)</code><code>(pdef name pattern)</code></div><div class="doc"><pre class="plaintext">Register PATTERN under NAME, returning PATTERN. Called with just NAME,
 returns the registered pattern (nil when unknown).
-Playing state and play/stop/end live in patterns.clock.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L74">view source</a></div></div><div class="public anchor" id="var-pdef-pattern"><h3>pdef-pattern</h3><div class="usage"><code>(pdef-pattern x)</code></div><div class="doc"><pre class="plaintext">Return the pattern for X: pattern maps (anything with `:ptype`) pass
-through, anything else is looked up with `find-pdef`.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L94">view source</a></div></div><div class="public anchor" id="var-pmono"><h3>pmono</h3><div class="usage"><code>(pmono instrument &amp; pairs)</code></div><div class="doc"><pre class="plaintext">Mono event pattern: like `pbind` with `:instrument` set and
-`:type :mono`. Upstream `(pmono instrument &amp;rest pairs)`.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L160">view source</a></div></div><div class="public anchor" id="var-prest"><h3>prest</h3><div class="usage"><code>(prest)</code><code>(prest v)</code></div><div class="doc"><pre class="plaintext">Make a rest marker holding VALUE (default 1). When a pbind child yields
+Playing state and play/stop/end live in patterns.clock.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L73">view source</a></div></div><div class="public anchor" id="var-pdef-pattern"><h3>pdef-pattern</h3><div class="usage"><code>(pdef-pattern x)</code></div><div class="doc"><pre class="plaintext">Return the pattern for X: pattern maps (anything with `:ptype`) pass
+through, anything else is looked up with `find-pdef`.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L93">view source</a></div></div><div class="public anchor" id="var-pmono"><h3>pmono</h3><div class="usage"><code>(pmono instrument &amp; pairs)</code></div><div class="doc"><pre class="plaintext">Mono event pattern: like `pbind` with `:instrument` set and
+`:type :mono`. Upstream `(pmono instrument &amp;rest pairs)`.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L159">view source</a></div></div><div class="public anchor" id="var-prest"><h3>prest</h3><div class="usage"><code>(prest)</code><code>(prest v)</code></div><div class="doc"><pre class="plaintext">Make a rest marker holding VALUE (default 1). When a pbind child yields
 this for a key, the event keeps VALUE for that key but its `:type`
 becomes `:rest`, which the backend renders as silence.
-Upstream: `(prest &amp;optional (value 1))`.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L55">view source</a></div></div><div class="public anchor" id="var-prest.3F"><h3>prest?</h3><div class="usage"><code>(prest? x)</code></div><div class="doc"><pre class="plaintext">True when X is a `prest` rest marker.
-</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L63">view source</a></div></div></div></body></html>
+Upstream: `(prest &amp;optional (value 1))`.</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L54">view source</a></div></div><div class="public anchor" id="var-prest.3F"><h3>prest?</h3><div class="usage"><code>(prest? x)</code></div><div class="doc"><pre class="plaintext">True when X is a `prest` rest marker.
+</pre></div><div class="src-link"><a href="https://github.com/delayedchoice/clojure-collider/blob/master/src/patterns/pbind.clj#L62">view source</a></div></div></div></body></html>

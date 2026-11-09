@@ -15,7 +15,7 @@
               sv)
             (catch Exception e (println "SKIP buffer tests:" (.getMessage e)) nil))]
     (when s
-      (try (binding [server/*s* s] (f s))
+      (try (f s)
            (finally (server/server-quit s))))))
 
 (deftest buffer-dur-pure
@@ -56,7 +56,7 @@
   (with-server
    (fn [s]
      (testing "alloc fills frames/chanls/sr via /b_info"
-       (let [b (buf/buffer-alloc 512 :server s)]
+       (let [b (buf/buffer-alloc s 512)]
          (is (= 512 (:frames b)))
          (is (= 1 (:chanls b)))
          (is (pos? (:sr b)))
@@ -68,32 +68,32 @@
            (is (every? #(= 0.0 (float %)) (buf/buffer-getn b 0 4))))
          (testing "free reuses slot"
            (let [n (:bufnum b)]
-             (buf/buffer-free b)
+             (buf/buffer-free s b)
              (is (nil? (nth @(:buffers s) n)))
-             (is (= n (:bufnum (buf/buffer-alloc 64 :server s))))
-             (buf/buffer-free n s))))))))
+             (is (= n (:bufnum (buf/buffer-alloc s 64))))
+             (buf/buffer-free s n))))))))
 
 (deftest consecutive-alloc
   (with-server
    (fn [s]
-     (let [bs (buf/buffer-alloc-consecutive 3 128 :server s)]
+     (let [bs (buf/buffer-alloc-consecutive s 3 128)]
        (is (= 3 (count bs)))
        (is (= [(:bufnum (first bs)) (:bufnum (second bs)) (:bufnum (nth bs 2))]
               (range (:bufnum (first bs)) (+ 3 (:bufnum (first bs))))))
        (is (every? #(= 128 (:frames %)) bs))
-       (doseq [b bs] (buf/buffer-free b))))))
+       (doseq [b bs] (buf/buffer-free s b))))))
 
 (deftest buffer-copy-round-trip
   (testing "copy lands frames in dst (pins the /b_gen address fix)"
     (with-server
      (fn [s]
-       (let [src (buf/buffer-alloc 8 :server s)
-             dst (buf/buffer-alloc 8 :server s)]
+       (let [src (buf/buffer-alloc s 8)
+             dst (buf/buffer-alloc s 8)]
          (buf/buffer-set src 0 0.75)
          (buf/buffer-copy dst src)
          (is (< (Math/abs (- 0.75 (buf/buffer-get dst 0))) 1e-4))
-         (buf/buffer-free src)
-         (buf/buffer-free dst))))))
+         (buf/buffer-free s src)
+         (buf/buffer-free s dst))))))
 
 (deftest pure-wavetable-math
   (testing "wavetable formats are exact ports (float-preserving)"
@@ -121,12 +121,11 @@
   (testing "/b_gen and chunked /b_setn collect exact score messages"
     (let [s (server/make-nrt-server)
           buf (buf/map->Buffer {:bufnum 7 :server s :frames 4096 :chanls 1})]
-      (buf/buffer-fill buf :sine [1.0 0.5] :server s)
+      (buf/buffer-fill buf :sine [1.0 0.5])
       (is (= [[0 [["/b_gen" 7 "sine1" 7 1.0 0.5]]]] @(:streams s)))
       (reset! (:streams s) [])
-      (buf/buffer-fill buf :cheby [0.3] :server s :normalize false)
-      (is (= [[0 [["/b_gen" 7 "cheby" 6 0.3]]]] @(:streams s))
-          "flags = wavetable + clear, no normalize")
+      (buf/buffer-fill buf :cheby [0.3] :normalize false)
+      (is (= [[0 [["/b_gen" 7 "cheby" 6 0.3]]]] @(:streams s)))
       (reset! (:streams s) [])
       (buf/buffer-send-sequence buf (range 2500))
       (is (= [0 0 0] (mapv first @(:streams s))))
@@ -139,7 +138,7 @@
    (fn [s]
      (testing "alloc-sequence + to-list round-trip"
        (let [vs (mapv #(/ % 100.0) (range 64))
-             b (buf/buffer-alloc-sequence vs :server s)]
+             b (buf/buffer-alloc-sequence s vs)]
          (is (= 64 (:frames b)))
          (let [back (buf/buffer-to-list b)]
            (is (= 64 (count back)))
@@ -150,7 +149,7 @@
              (is (every? true? (map #(< (Math/abs (- %1 (float %2))) 1e-4)
                                     (mapv #(* % 2.0) vs) back)))))
          (testing "fill sine reads back a sine"
-           (buf/buffer-fill b :sine [1.0] :server s :wavetable false)
+           (buf/buffer-fill b :sine [1.0] :wavetable false)
            (let [back (buf/buffer-get-to-list b :end 32)]
              (is (< (Math/abs (first back)) 0.05) "starts near zero")
              (is (< 0.9 (apply max (map #(Math/abs (double %)) back))) "peaks near 1")))
@@ -161,15 +160,15 @@
              (is (= [[0 [["/b_setSampleRate" (float (:bufnum b)) 22050.0]]]
                      [0 [["/b_query" (:bufnum b)]]]]
                     @(:streams nrt)))))
-         (buf/buffer-free b)))
+         (buf/buffer-free s b)))
      (testing "read-as-wavetable doubles next power-of-two"
-       (let [src (buf/buffer-alloc-sequence (vec (repeat 100 0.25)) :server s)
+       (let [src (buf/buffer-alloc-sequence s (vec (repeat 100 0.25)))
              wav (str "/tmp/wt-" (System/currentTimeMillis) ".wav")]
          (try
            (buf/buffer-write src wav)
-           (let [w (buf/buffer-read-as-wavetable wav :server s)]
+           (let [w (buf/buffer-read-as-wavetable s wav)]
              (is (= 256 (:frames w)) "100 frames -> pow2 128 -> 256-frame table")
-             (buf/buffer-free w))
+             (buf/buffer-free s w))
            (finally
-             (buf/buffer-free src)
+             (buf/buffer-free s src)
              (.delete (io/file wav)))))))))

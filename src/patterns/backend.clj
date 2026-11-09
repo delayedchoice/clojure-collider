@@ -3,8 +3,8 @@
    Mirrors upstream backend.lisp (MVP slice) + backends/supercollider.lisp
    + backends/debug.lisp: a Backend protocol (play-event [b ev beat-sec]),
    a DebugBackend record capturing {:beat ev} into an atom for tests, and a
-   ClColliderBackend record {:server} that starts synths via sdef/synth
-   scheduled with server/at and releases gated synths via server/ctrl."
+   ClColliderBackend record {:server} that starts synths via sdef/synth-msg
+   bundled with server/send-bundle and releases gated synths via server/ctrl."
   (:require [patterns.util :as u]
             [patterns.event :as ev]
             [clojure-collider.server.server :as server]
@@ -106,9 +106,8 @@
               (fn [ev]
                 (let [iname (instrument-name ev)
                       args (control-args ev)
-                      node (binding [server/*s* srv]
-                             (server/at beat-sec
-                               (apply sdef/synth iname args)))]
+                      [node msg] (apply sdef/synth-msg srv iname args)]
+                  (server/send-bundle srv beat-sec [msg])
                   ;; Release only makes sense for gated voices: percussive
                   ;; synths (:act :free envelopes, no gate param) free
                   ;; themselves, and a late gate-0 would /n_set a dead node.
@@ -119,25 +118,24 @@
                         (let [tempo (or (ev/event-value ev :tempo) 1)
                               gate-sec (+ (double beat-sec)
                                           (* (double sus) (/ 1.0 (double tempo))))]
-                           (binding [server/*s* srv]
-                             (server/callback gate-sec
-                               ;; The voice may already be gone (freed envelope,
-                               ;; ended pattern): gate-0 on a dead node is a
-                               ;; server FAILURE line. Skip when /n_end was
-                               ;; seen; a residual check-then-send race stays loud.
-                               (fn [] (when (server/is-playing? node)
-                                        (server/ctrl node :gate 0)))))))))
+                          (server/callback srv gate-sec
+                            ;; The voice may already be gone (freed envelope,
+                            ;; ended pattern): gate-0 on a dead node is a
+                            ;; server FAILURE line. Skip when /n_end was
+                            ;; seen; a residual check-then-send race stays loud.
+                            (fn [] (when (server/is-playing? node)
+                                     (server/ctrl node :gate 0))))))))
                   node))]
           (if (= 1 (count voices))
             (start-one (first voices))
             (mapv start-one voices)))))))
 
 (defn make-cl-collider-backend
-  "Make a ClColliderBackend bound to SERVER (defaults to server/*s*).
+  "Make a ClColliderBackend bound to SERVER.
    :type :rest events produce silence (no synth). Synths exposing a gate
    are released sustain-beats later; gateless synths play their envelope."
-  ([] (make-cl-collider-backend server/*s*))
-  ([srv] (->ClColliderBackend srv)))
+  [server]
+  (->ClColliderBackend server))
 
 ;; Re-exported so the end-of-pattern contract is visible from this ns too.
 (def eop

@@ -15,55 +15,54 @@
             [pattern :as p]))
 
 (defn -main [& _]
-  (let [s (server/make-external-server "example" :port 57134)]
+  (let [s (server/make-external-server "example" :port 57134)
+        clock (p/start-clock-loop :tempo 60)]
     (server/server-boot s)
-    (binding [server/*s* s]
-      ;; Carrier freq from mouse Y (exp 200-5000), modulator freq from mouse X
-      ;; (exp 1-2000), mod depth wandered by stepped noise (20-10000, 8 steps/s).
-      ;; poll.kr prints the mouse values server-side 10x/sec — the UGen(...):
-      ;; <val> lines in the output ARE the demo. Slow the first poll arg or
-      ;; drop poll to silence them. dup = mono to stereo pair.
-      (let [drone (sdef/play
-                    (ops/dup (ops/* (ug/sin-osc:ar
-                                      (ops/+ (ug/poll:kr 10 (ug/mouse-y:kr 200 5000 :exp))
-                                             (ug/sin-osc:ar
-                                               (ug/poll:kr 10 (ug/mouse-x:kr 1 2000 :exp))
-                                               0 (ops/range (ug/lf-noise0:kr 8) 20 10000)))
-                                      0 0.2))))]
-        (Thread/sleep 6000)
-        (server/node-free drone))
-      ;; Percussive FM voice: carrier + one modulator, perc envelope frees the
-      ;; synth (like upstream :act :free), panned stereo out.
-      (sdef/defsynth :fm [car-hz 500
-                            mod-hz 100
-                            mod-amp 200
-                            atk 0.01
-                            rel 1
-                            amp 0.2
-                            pan 0]
-        (ug/out:ar 0 (ug/pan2:ar (ops/* (ug/env-gen:kr (ug/env-perc atk rel) :act :free)
-                                        (ug/sin-osc:ar (ops/+ car-hz
-                                                               (ug/sin-osc:ar mod-hz 0 mod-amp)))
-                                        amp)
-                                 pan)))
-      ;; The pattern half: 32 eighth-notes (dur 1/8 at 60 BPM), every param
-      ;; drawn fresh per note — pexprand for the exponential FM ranges,
-      ;; pwhite for the uniform ones. Replaces the hand-rolled server/at loop.
-      (p/start-clock-loop :tempo 60)
-      (p/enable-backend! (p/make-cl-collider-backend s))
-      (p/pb :p
-        :instrument :fm
-        :dur 1/8
-        :car-hz (p/pexprand 20 10000)
-        :mod-hz (p/pexprand 20 10000)
-        :mod-amp (p/pwhite 0 10000)
-        :amp (p/pexprand 0.1 0.5)
-        :atk (p/pexprand 0.001 0.05)
-        :rel (p/pexprand 0.05 1.2)
-        :pan (p/pwhite -1.0 1.0))
-      (p/play :p)
-      ;; 32 eighth-notes at 60 BPM = 4s of notes + ~1.2s longest tail.
-      (Thread/sleep 7000)
-      (p/stop :p))
+    (p/connect-server! clock s)
+    ;; Carrier freq from mouse Y (exp 200-5000), modulator freq from mouse X
+    ;; (exp 1-2000), mod depth wandered by stepped noise (20-10000, 8 steps/s).
+    ;; poll.kr prints the mouse values server-side 10x/sec — the UGen(...):
+    ;; <val> lines in the output ARE the demo. Slow the first poll arg or
+    ;; drop poll to silence them. dup = mono to stereo pair.
+    (let [drone (sdef/play s
+                  (ops/dup (ops/* (ug/sin-osc:ar
+                                    (ops/+ (ug/poll:kr 10 (ug/mouse-y:kr 200 5000 :exp))
+                                           (ug/sin-osc:ar
+                                             (ug/poll:kr 10 (ug/mouse-x:kr 1 2000 :exp))
+                                             0 (ops/range (ug/lf-noise0:kr 8) 20 10000)))
+                                    0 0.2))))]
+      (Thread/sleep 6000)
+      (server/node-free drone))
+    ;; Percussive FM voice: carrier + one modulator, perc envelope frees the
+    ;; synth (like upstream :act :free), panned stereo out.
+    (sdef/defsynth s :fm [car-hz 500
+                          mod-hz 100
+                          mod-amp 200
+                          atk 0.01
+                          rel 1
+                          amp 0.2
+                          pan 0]
+      (ug/out:ar 0 (ug/pan2:ar (ops/* (ug/env-gen:kr (ug/env-perc atk rel) :act :free)
+                                      (ug/sin-osc:ar (ops/+ car-hz
+                                                             (ug/sin-osc:ar mod-hz 0 mod-amp)))
+                                      amp)
+                               pan)))
+    ;; The pattern half: 32 eighth-notes (dur 1/8 at 60 BPM), every param
+    ;; drawn fresh per note — pexprand for the exponential FM ranges,
+    ;; pwhite for the uniform ones. Replaces the hand-rolled scheduler loop.
+    (p/pb :p
+      :instrument :fm
+      :dur 1/8
+      :car-hz (p/pexprand 20 10000)
+      :mod-hz (p/pexprand 20 10000)
+      :mod-amp (p/pwhite 0 10000)
+      :amp (p/pexprand 0.1 0.5)
+      :atk (p/pexprand 0.001 0.05)
+      :rel (p/pexprand 0.05 1.2)
+      :pan (p/pwhite -1.0 1.0))
+    (p/play clock :p)
+    ;; 32 eighth-notes at 60 BPM = 4s of notes + ~1.2s longest tail.
+    (Thread/sleep 7000)
+    (p/stop clock :p)
     (server/server-quit s)
     (println :done)))

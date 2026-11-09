@@ -3,30 +3,24 @@
    breaks), CL-parity goldens for select/demand customs, and the klang
    structural pin (our Klang is multi-out; upstream emits 1 — DECISIONS)."
   (:require [clojure.test :refer [deftest is testing]]
-            [clojure-collider.synth.ugen :as ugen]
+            [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.synthdef :as synthdef]
             [clojure-collider.ugens :as u])
   (:import [java.util Arrays]
            [java.nio.file Files Paths]))
 
 (defn- build-names [thunk]
-  (let [sd (synthdef/make-synthdef "t")]
-    (binding [ugen/*synthdef* sd]
-      (thunk)
-      (synthdef/build-synthdef sd)
-      (mapv :name (:children @sd)))))
+  (let [sd (sdef/defsynth nil "smoke" [] (thunk))]
+    (mapv :name (:children @sd))))
 
 (defn- want [n]
   (Files/readAllBytes (Paths/get (str "test/resources/golden/cl-" n ".scsyndef")
                                  (into-array String []))))
 
 (defn- golden [n thunk]
-  (let [sd (synthdef/make-synthdef n)]
-    (binding [ugen/*synthdef* sd]
-      (thunk)
-      (synthdef/build-synthdef sd)
-      (is (Arrays/equals ^bytes (want n) ^bytes (synthdef/encode-synthdef sd))
-          (str "cl-" n ".scsyndef differs from CL output")))))
+  (let [sd (sdef/defsynth nil (symbol n) [] (thunk))]
+    (is (Arrays/equals ^bytes (want n) ^bytes (synthdef/encode-synthdef sd))
+        (str "cl-" n ".scsyndef differs from CL output"))))
 
 (deftest select-golden
   (golden "select"
@@ -40,14 +34,12 @@
 (deftest klang-shape
   (testing "Klang voices one channel per partial (SC semantics); upstream
             CL inherits 1 output (see DECISIONS 2026-10-06)"
-    (let [sd (synthdef/make-synthdef "klang")]
-      (binding [ugen/*synthdef* sd]
-        (u/out:ar 0 (u/klang:ar [[800 1071] [1.0 1.0] [0.0 0.0]]))
-        (synthdef/build-synthdef sd)
-        (is (= ["Klang" "Out"] (mapv :name (:children @sd))))
-        (let [k (first (:children @sd))]
-          (is (= 8 (count (:inputs k))))
-          (is (= 2 (:channels k))))))))
+    (let [sd (sdef/defsynth nil "klang" []
+               (u/out:ar 0 (u/klang:ar [[800 1071] [1.0 1.0] [0.0 0.0]])))]
+      (is (= ["Klang" "Out"] (mapv :name (:children @sd))))
+      (let [k (first (:children @sd))]
+        (is (= 8 (count (:inputs k))))
+        (is (= 2 (:channels k)))))))
 
 (defn- car [] (u/sin-osc:ar 440 0 1 0))
 
@@ -73,7 +65,7 @@
              [:ienv-gen #(u/out:ar 0 (u/i-env-gen:ar (u/env [0 1 0] [1 1]) 0)) "IEnvGen"]
              [:info #(u/out:ar 0 (u/sin-osc:ar (u/sample-rate:ir) 0 1 0)) "SampleRate"]
              [:mac #(u/out:kr 0 (u/mouse-x:kr)) "MouseX"]
-             [:machine #(u/out:kr 0 (u/loudness:kr 0)) "Loudness"]
+             [:machine #(u/out:kr 0 (u/loudness:kr (car))) "Loudness"]
              [:moog #(u/out:ar 0 (u/moog-ff:ar (car))) "MoogFF"]
              [:noise #(u/out:ar 0 (u/white-noise:ar)) "WhiteNoise"]
              [:osc #(u/out:ar 0 (u/vibrato:ar)) "Vibrato"]
@@ -140,11 +132,8 @@
     (is (== 0.5 (u/fold 1.5 0 1)))
     (is (== 0.5 (u/wrap 1.5 0 1)))
     (let [units (fn [thunk]
-                  (let [sd (synthdef/make-synthdef "t")]
-                    (binding [ugen/*synthdef* sd]
-                      (thunk)
-                      (synthdef/build-synthdef sd)
-                      (:children @sd))))
+                  (let [sd (sdef/defsynth nil "clip" [] (thunk))]
+                    (:children @sd)))
           rate-of (fn [us nm]
                     (:rate (some #(when (= nm (:name %)) %) us)))]
       (is (= :audio (rate-of (units #(u/clip (car) 0 1)) "Clip")))

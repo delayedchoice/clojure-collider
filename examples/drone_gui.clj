@@ -27,10 +27,8 @@
       (Thread. ^Runnable
         (fn [] (try (when (server/boot? s) (server/server-quit s))
                     (catch Exception e
-                      (binding [*out* *err*]
-                        (println :shutdown-quit-failed (ex-message e))))))))
-    (binding [server/*s* s]
-      (dc/define-voice!))
+                      (.println System/err (str :shutdown-quit-failed " " (ex-message e))))))))
+    (dc/define-voice! s)
     (let [specs (g/specs-from-synthdef :drone-collider
                                        :skip #{:out :voiceid}
                                        :ranges ranges)]

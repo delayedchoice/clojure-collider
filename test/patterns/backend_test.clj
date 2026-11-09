@@ -58,9 +58,9 @@
 
 (deftest gated-synth-predicate
   (testing "gate-0 release only for synths exposing gate (no /n_set on dead nodes)"
-    (sdef/defsynth :gate-probe-gated [gate 1 freq 440]
+    (sdef/defsynth nil :gate-probe-gated [gate 1 freq 440]
       (io/out:ar 0 (osc/sin-osc:ar freq 0 0.1)))
-    (sdef/defsynth :gate-probe-free [freq 440]
+    (sdef/defsynth nil :gate-probe-free [freq 440]
       (io/out:ar 0 (osc/sin-osc:ar freq 0 0.1)))
     (is (true? (b/gated-synth? :gate-probe-gated)))
     (is (false? (b/gated-synth? :gate-probe-free)))

@@ -4,7 +4,7 @@
             [patterns.util :as u]
             [patterns.conversions :as conv]
             [patterns.scales :as scales]
-            [patterns.event :as ev :refer [*event* e]]))
+            [patterns.event :as ev]))
 
 (defn- approx?
   [a b eps]
@@ -129,11 +129,10 @@
     (is (= [:a] (ev/events-differing-keys (ev/event :a 1 :b 2)
                                           (ev/event :a 9 :b 2))))))
 
-(deftest e-sugar
-  (testing "e reads the bound event"
-    (binding [*event* (ev/event :amp 0.9 :midinote 60)]
-      (is (= 0.9 (e :amp)))
-      (is (approx? (e :freq) 261.6255653005986 1e-9))))
-  (testing "unbound event yields nil"
-    (binding [*event* nil]
-      (is (nil? (e :amp))))))
+(deftest explicit-event-reads
+  (testing "event-value reads an explicit event map"
+    (let [m (ev/event :amp 0.9 :midinote 60)]
+      (is (= 0.9 (ev/event-value m :amp)))
+      (is (approx? (ev/event-value m :freq) 261.6255653005986 1e-9))))
+  (testing "unknown keys yield nil"
+    (is (nil? (ev/event-value (ev/event :amp 0.9) :nope)))))
