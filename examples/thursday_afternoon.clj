@@ -3,6 +3,8 @@
 ;; Bounce: clojure -M -m thursday-afternoon bounce [seconds] [out.aiff]
 ;; Silence: clojure -M -m thursday-afternoon silence (kills every local
 ;; scsynth, no REPL state needed - for when stop/panic can't reach it)
+;; REPL (same thread, no bindings): (def h (thursday-afternoon/start!)) ...
+;; (thursday-afternoon/stop! h)
 ;;
 ;; After https://reverbmachine.com/blog/deconstructing-brian-eno-thursday-afternoon/
 ;; Harmonically everything belongs to a G dominant 7th (G B D F) with an
@@ -117,6 +119,40 @@
 
 (defn- stop-all! []
   (p/stop :all))
+
+(defn start!
+  "Non-blocking Thursday for REPL use: boots scsynth, defines voices and
+   sequences, starts the 15 loops and the drone. Returns a handle
+   {:server s :verb v :drones [...]} for stop!. Thread-proof: the handle
+   carries the server record and tasks live on the global clock, so no
+   REPL bindings are needed - call stop! on the same thread or any other.
+   Keep in step with live-main (same fade shape)."
+  [& {:keys [port] :or {port 57176}}]
+  (let [s (server/make-external-server "thursday" :port port)]
+    (binding [server/*s* (p/connect-server! s :tempo 60)]
+      (define-voices!)
+      (define-sequences!)
+      (let [verb (sdef/synth :thursday-verb :inbus 16)
+            drones (start-drones!)]
+        (play-all!)
+        {:server s :verb verb :drones drones}))))
+
+(defn stop!
+  "Fade Thursday out from handle H (same thread as start!, or any other):
+   gates the verb (10s release) under which everything else goes quiet,
+   stops all tasks, frees verb and drones, quits the server. Idempotent:
+   a second call returns :already-stopped. Returns :done."
+  [{:keys [server verb drones]}]
+  (if-not (and server (server/boot? server))
+    :already-stopped
+    (do (binding [server/*s* server]
+          (server/ctrl verb :gate 0)
+          (Thread/sleep 11000)
+          (stop-all!)
+          (server/node-free verb)
+          (doseq [d drones] (server/node-free d)))
+        (server/server-quit server)
+        :done)))
 
 (defn- live-main [secs]
   (let [s (server/make-external-server "thursday" :port 57176)]
