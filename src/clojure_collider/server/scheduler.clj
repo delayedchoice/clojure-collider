@@ -157,7 +157,14 @@
   (when (running? sched)
     (sched-clear sched)
     (sched-add sched -1 (fn [] stop-task))
-    (.join ^Thread @(:thread sched))
+    ;; Bounded join: on JDK 21 Thread.stop always throws, so nREPL/Conjure
+    ;; can never interrupt a stuck worker - an unbounded join would wedge
+    ;; the caller forever. Workers are daemons; abandon a stuck one.
+    (let [t ^Thread @(:thread sched)]
+      (.join t 5000)
+      (when (.isAlive t)
+        (binding [*out* *err*]
+          (println "sched-stop: worker still alive after 5s, continuing"))))
     (reset! (:status sched) :stop))
   nil)
 
@@ -258,7 +265,13 @@
       (.lock l)
       (try (.signal ^java.util.concurrent.locks.Condition (:sync-cond clock))
            (finally (.unlock l))))
-    (.join ^Thread @(:sync-thread clock))
+    ;; Bounded join (see sched-stop): the await caps at 20s per cycle, and
+    ;; a stuck sync thread must not wedge the quitter.
+    (let [t ^Thread @(:sync-thread clock)]
+      (.join t 25000)
+      (when (.isAlive t)
+        (binding [*out* *err*]
+          (println "resync-stop: sync thread still alive after 25s, continuing"))))
     (reset! (:sync-thread clock) nil)))
 
 (defn tempo-clock-run [clock]
@@ -290,7 +303,12 @@
       (tempo-clock-add clock (+ (tempo-clock-beats clock)
                                 (/ (* ahead 0.5) @(:beat-dur clock)))
                        (fn [] stop-task)))
-    (.join ^Thread @(:thread clock))
+    ;; Bounded join: see sched-stop. Daemon worker; abandon a stuck one.
+    (let [t ^Thread @(:thread clock)]
+      (.join t 5000)
+      (when (.isAlive t)
+        (binding [*out* *err*]
+          (println "tempo-clock-stop: worker still alive after 5s, continuing"))))
     (tempo-clock-clear clock)
     (reset! (:status clock) :stop))
   nil)
