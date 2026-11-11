@@ -8,11 +8,11 @@ _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
 ### 2026-11-11 — `patterns.clock/halt!` immediate full stop in the library
-- `thursday-afternoon/halt!` was example-only; stopping all sound now is `p/halt!`: drop clock tasks, `server/panic!` (clear schedulers, /clearSched, /g_deepFree), `server-quit`. Synchronous, no fade, returns `:halted`, throws on failure (REPL helpers catch). `p/panic!` stays the no-quit global; orphans outside the process still need `killall scsynth`.
+- Stopping all sound is now only `p/halt!`: drop clock tasks, `server/panic!` (clear schedulers, /clearSched, /g_deepFree), `server-quit`. Synchronous, no fade, returns `:halted`, throws on failure (REPL helpers catch). Accepts a clock, a library Handle, or a parts map with `:clock` - symmetric with `start!` fns that return handles. The example-level `stop!`/`halt!` were removed. `p/panic!` stays the no-quit global; orphans outside the process still need `killall scsynth`.
 - Status: decided
 
 ### 2026-11-11 — `clojure-collider.handle` id-handles for REPL use
-- Handles that hold streams/queues/sockets print as tens of KB of single-line EDN; returning one as an eval value wedged nREPL clients (Conjure never served the next eval, music un-stoppable). Fix: `register!` stores the parts map in a registry and returns a one-field `Handle` record - tiny under *default* printing, so no print-method that can go stale across redefinitions, immune to piecemeal eval. `resolve-handle` accepts old full maps too (pre-registry handles keep working); `release!` on quit, idempotent. First consumer: `thursday-afternoon/start!/stop!/halt!`.
+- Handles that hold streams/queues/sockets print as tens of KB of single-line EDN; returning one as an eval value wedged nREPL clients (Conjure never served the next eval, music un-stoppable). Fix: `register!` stores the parts map in a registry and returns a one-field `Handle` record - tiny under *default* printing, so no print-method that can go stale across redefinitions, immune to piecemeal eval. `resolve-handle` accepts old full maps too; `release!` on quit, idempotent. First consumer: `thursday-afternoon/start!` (stopped via `p/halt!`).
 - Status: decided
 
  ### 2026-11-09 — thread locals eliminated (tagged `thread-local` before)
