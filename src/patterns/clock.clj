@@ -295,24 +295,27 @@
    (other JVMs, lost handles) need server/panic-all! (stays booted) or
    killall scsynth."
   [clock]
-  (cond
+  ;; Bind before touching: (:server clock) may be missing (a handle, not a
+  ;; clock) or a stale record; deref blindly NPEs instead of skipping.
+  (let [srv (:server clock)
+        s (when (instance? clojure.lang.Atom srv) @srv)]
+   (cond
     (nil? clock)
     (do (println :halt-skipped :reason :no-clock)
         :already-stopped)
-    (nil? @(:server clock))
+    (nil? s)
     (do (println :halt-skipped :reason :no-server)
         :already-stopped)
-    (not (server/boot? @(:server clock)))
+    (not (server/boot? s))
     (do (println :halt-skipped :reason :not-booted)
         :already-stopped)
     :else
-    (let [s @(:server clock)]
-      (println :halting (:name s))
-      (stop clock :all)
-      (server/panic! s)
-      (server/server-quit s)
-      (println :halted (:name s))
-      :halted)))
+    (do (println :halting (:name s))
+        (stop clock :all)
+        (server/panic! s)
+        (server/server-quit s)
+        (println :halted (:name s))
+        :halted))))
 
 (defn end
   "End TASK (or tasks playing pdef keyword X) on CLOCK: finish the
