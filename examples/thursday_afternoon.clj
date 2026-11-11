@@ -4,6 +4,7 @@
 ;; Silence: clojure -M -m thursday-afternoon silence (kills every local
 ;; scsynth, no REPL state needed - for when stop/panic can't reach it)
 ;; REPL: (def h (thursday-afternoon/start!)) ... (thursday-afternoon/stop! h)
+;; for the 10s musical fade, (thursday-afternoon/halt! h) to stop at once.
 ;;
 ;; After https://reverbmachine.com/blog/deconstructing-brian-eno-thursday-afternoon/
 ;; Harmonically everything belongs to a G dominant 7th (G B D F) with an
@@ -181,15 +182,45 @@
             (Thread/sleep 11000)
             (stop-all! clock)
             (println :thursday-tasks-stopped)
-            (server/node-free verb)
-            (doseq [d drones] (server/node-free d))
-            (server/server-quit server)
-            (println :thursday-stopped)
+            ;; A halt! may have torn everything down while the fade slept;
+            ;; that is the expected override, not a failure.
+            (if (server/boot? server)
+              (do (server/node-free verb)
+                  (doseq [d drones] (server/node-free d))
+                  (server/server-quit server)
+                  (println :thursday-stopped))
+              (println :thursday-stopped :already :halted))
             (catch Throwable t
               (println :thursday-stop-failed (.getName (class t)) (ex-message t)))
             (finally
               (release-stopping! server))))
         :stopping)))
+
+(defn halt!
+  "Stop Thursday immediately (Overtone-stop semantics): drop all pattern
+   tasks, free verb and drones now with no fade, quit the server.
+   Synchronous and fast (no sleeps); returns :halted. Overrides a fade
+   in flight - the fade then wakes, sees the server down, and stands
+   down. For the musical 10s fade, use stop!."
+  [{:keys [server clock verb drones]}]
+  (cond
+    (nil? server)
+    (do (println :thursday-halt-skipped :reason :no-server)
+        :already-stopped)
+    (not (server/boot? server))
+    (do (println :thursday-halt-skipped :reason :not-booted)
+        :already-stopped)
+    :else
+    (do (println :thursday-halting)
+        (try
+          (stop-all! clock)
+          (server/node-free verb)
+          (doseq [d drones] (server/node-free d))
+          (server/server-quit server)
+          (println :thursday-halted)
+          :halted
+          (catch Throwable t
+            (println :thursday-halt-failed (.getName (class t)) (ex-message t)))))))
 
 (defn- live-main [secs]
   (let [s (server/make-external-server "thursday" :port 57176)
