@@ -115,10 +115,44 @@
                                 :out 16 :pan pan))
         drone-notes [-0.2 0.0 0.2]))
 
+;; Names of the loop tasks Thursday manages. Lets redefine-sequences!
+;; stop loops removed from `loops` instead of leaving them ringing.
+(defonce ^:private live-loops (atom #{}))
+
 (defn- play-all! [clock]
-  (doseq [[nm _ _ _] loops] (p/play clock nm)))
+  (doseq [[nm _ _ _] loops] (p/play clock nm))
+  (reset! live-loops (set (map first loops))))
 (defn- stop-all! [clock]
   (p/stop clock :all))
+
+(defn redefine-sequences!
+  "Live-coding entry point: re-register loop patterns from the current
+   value of `loops` and restart the loop tasks so edits sound without
+   rebooting. Edit the `loops` vector (re-def it), then call this with
+   the start! handle: removed loops stop, the rest restart from their
+   cycle start, new loops start playing - afterwards exactly `loops`
+   is playing. Drones and voices are untouched (sequences only). If the
+   server is down it re-registers without touching tasks. Returns
+   {:redefined n :restarted m :stopped-stale k}, all small. REPL flow:
+   (def loops (assoc-in loops [0 2] 72)) ; sine1 plays G5 now
+   (thursday-afternoon/redefine-sequences! h)"
+  [h]
+  (let [parts (if (:server h) h (handle/resolve-handle h))
+        {:keys [server clock]} parts
+        names (mapv first loops)
+        new-set (set names)
+        stale (remove new-set @live-loops)]
+    (define-sequences!)
+    (if (and server (server/boot? server))
+      (do (doseq [nm stale] (p/stop clock nm))
+          (doseq [[nm _ _ _] loops]
+            (p/stop clock nm)
+            (p/play clock nm))
+          (reset! live-loops new-set)
+          {:redefined (count names)
+           :restarted (count names)
+           :stopped-stale (count stale)})
+      {:redefined (count names) :restarted 0 :stopped-stale 0})))
 
 (defn start!
   "Non-blocking Thursday for REPL use: boots scsynth, defines voices and
