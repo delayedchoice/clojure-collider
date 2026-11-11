@@ -15,7 +15,8 @@
 ;; range) with +-0.6s jitter per repeat,stand-ins documented as such.
 ;; The clock runs at 60bpm so pattern beats ARE seconds.
 (ns thursday-afternoon
-  (:require [clojure-collider.server.server :as server]
+  (:require [clojure-collider.handle :as handle]
+            [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [ugens :as ug]
@@ -119,25 +120,11 @@
 
 (defn- stop-all! [clock]
   (p/stop clock :all))
-(defrecord ThursdayHandle [id])
-;; The handle is an id into the registry below, never the parts themselves.
-;; A handle holding streams, queues and sockets prints as tens of KB of
-;; single-line EDN; returning that as an eval value wedges nREPL clients
-;; (Conjure never serves the next eval). One :id field default-prints tiny
-;; no matter how often this record is redefined, with no print-method that
-;; can go stale pointing at an older class generation. Accepts new
-;; id-handles and old full maps (pre-registry handles keep working).
-(defonce ^:private handles (atom {}))
-(defonce ^:private handle-seq (atom 0))
-(defn- register-handle! [m]
-  (let [id (swap! handle-seq inc)]
-    (swap! handles assoc id m)
-    (->ThursdayHandle id)))
+;; Handles are clojure-collider.handle ids (see that ns): returning one is
+;; always tiny, and resolving accepts old full-map handles too, so handles
+;; captured before the registry change keep working.
 (defn- resolve-handle [h]
-  (if (:server h) h (get @handles (:id h))))
-(defn- release-handle! [h]
-  (swap! handles dissoc (:id h))
-  nil)
+  (if (:server h) h (handle/resolve-handle h)))
 
 
 (defn start!
@@ -158,7 +145,7 @@
           drones (start-drones! s)]
       (play-all! clock)
       (println :thursday-started :port port :tasks (count @(:tasks clock)))
-      (register-handle! {:server s :clock clock :verb verb :drones drones}))))
+      (handle/register! {:server s :clock clock :verb verb :drones drones}))))
 
 (defonce ^:private stopping! (atom []))
 ;; Servers with a fade-out in flight (identity-compared). The fade runs on
@@ -214,7 +201,7 @@
               (do (server/node-free verb)
                   (doseq [d drones] (server/node-free d))
                   (server/server-quit server)
-                  (release-handle! h)
+                  (handle/release! h)
                   (println :thursday-stopped))
               (println :thursday-stopped :already :halted))
             (catch Throwable t
@@ -248,7 +235,7 @@
           (server/node-free verb)
           (doseq [d drones] (server/node-free d))
           (server/server-quit server)
-          (release-handle! h)
+          (handle/release! h)
           (println :thursday-halted)
           :halted
           (catch Throwable t

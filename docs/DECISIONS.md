@@ -7,6 +7,10 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+### 2026-11-11 — `clojure-collider.handle` id-handles for REPL use
+- Handles that hold streams/queues/sockets print as tens of KB of single-line EDN; returning one as an eval value wedged nREPL clients (Conjure never served the next eval, music un-stoppable). Fix: `register!` stores the parts map in a registry and returns a one-field `Handle` record - tiny under *default* printing, so no print-method that can go stale across redefinitions, immune to piecemeal eval. `resolve-handle` accepts old full maps too (pre-registry handles keep working); `release!` on quit, idempotent. First consumer: `thursday-afternoon/start!/stop!/halt!`.
+- Status: decided
+
  ### 2026-11-09 — thread locals eliminated (tagged `thread-local` before)
  - Every `^:dynamic` is gone: `server` is always the first arg (node/buffer/bus/group fns derive it from the record), patterns fns take `clock` first (clocks now carry a `:server` atom set by `connect-server!`/`setup-performance!`), `at`/`at-beat`/`at-task`/`with-async` deleted in favor of `send-bundle` + `synth-msg`/`ctrl-msg`/`node-free-msg` constructors, `with-rendering [[sym out & opts]]` binds lexically, `defsynth`/`play`/`proxy` take server first (play bodies' `with-controls` get the atom threaded by macroexpansion), synthdef graphs build by two-phase root collection (byte-identical goldens prove it), rng/scale defaults are plain atoms. `sdef/defsynth` accepts runtime names; `out:ar`-family and `poll`/`free-self`/`pause-self` now return the built unit (their old `in`-passthrough silently dropped the unit from the graph). Examples/REPL use handles, never bindings.
  - Status: decided
