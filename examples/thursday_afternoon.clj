@@ -119,25 +119,34 @@
 
 (defn- stop-all! [clock]
   (p/stop clock :all))
-(defrecord ThursdayHandle [server clock verb drones])
-;; The handle owns pattern streams and scheduler queues; the default
-;; record printer dumps all of it (tens of KB, single line) as every eval
-;; value. Terminal REPLs stream that fine, but nREPL+Conjure must render
-;; the whole value before the session serves the next eval - a stuck
-;; looking session after an otherwise healthy start!. Print one line.
-(defmethod print-method ThursdayHandle [h ^java.io.Writer w]
-  (.write w (str "#thursday[" (get-in h [:server :name]) " "
-                 (if (try (server/boot? (:server h)) (catch Throwable _ false))
-                   "up" "down") "]")))
+(defrecord ThursdayHandle [id])
+;; The handle is an id into the registry below, never the parts themselves.
+;; A handle holding streams, queues and sockets prints as tens of KB of
+;; single-line EDN; returning that as an eval value wedges nREPL clients
+;; (Conjure never serves the next eval). One :id field default-prints tiny
+;; no matter how often this record is redefined, with no print-method that
+;; can go stale pointing at an older class generation. Accepts new
+;; id-handles and old full maps (pre-registry handles keep working).
+(defonce ^:private handles (atom {}))
+(defonce ^:private handle-seq (atom 0))
+(defn- register-handle! [m]
+  (let [id (swap! handle-seq inc)]
+    (swap! handles assoc id m)
+    (->ThursdayHandle id)))
+(defn- resolve-handle [h]
+  (if (:server h) h (get @handles (:id h))))
+(defn- release-handle! [h]
+  (swap! handles dissoc (:id h))
+  nil)
 
 
 (defn start!
   "Non-blocking Thursday for REPL use: boots scsynth, defines voices and
-   sequences, starts the 15 loops and the drone. Returns a ThursdayHandle
-   (destructures as {:server :clock :verb :drones}) for stop!/halt!.
-   The handle carries the server record and the clock map, so no dynamic
-   state is needed to stop from any thread. Prints as one line so eval
-   values never dump megabytes into the REPL. Keep in step with live-main
+   sequences, starts the 15 loops and the drone. Returns an opaque
+   ThursdayHandle - pass it whole to stop!/halt!. The parts live in a
+   registry, so the value itself default-prints tiny and can never wedge
+   the REPL no matter how the value is delivered. No dynamic state is
+   needed to stop from any thread. Keep in step with live-main
    (same fade shape)."
   [& {:keys [port] :or {port 57176}}]
   (let [s (server/make-external-server "thursday" :port port)
@@ -149,7 +158,7 @@
           drones (start-drones! s)]
       (play-all! clock)
       (println :thursday-started :port port :tasks (count @(:tasks clock)))
-      (->ThursdayHandle s clock verb drones))))
+      (register-handle! {:server s :clock clock :verb verb :drones drones}))))
 
 (defonce ^:private stopping! (atom []))
 ;; Servers with a fade-out in flight (identity-compared). The fade runs on
@@ -176,10 +185,14 @@
    they happen (:thursday-stopping ... :thursday-tasks-stopped
    :thursday-stopped); a failure prints :thursday-stop-failed and releases
    the claim so a retry is possible. Returns :stopping."
-  [{:keys [server clock verb drones]}]
-  (cond
-    (nil? server)
+  [h]
+  (let [{:keys [server clock verb drones]} (resolve-handle h)]
+   (cond
+    (nil? h)
     (do (println :thursday-stop-skipped :reason :no-server)
+        :already-stopped)
+    (nil? server)
+    (do (println :thursday-stop-skipped :reason :unknown-handle)
         :already-stopped)
     (not (server/boot? server))
     (do (println :thursday-stop-skipped :reason :not-booted)
@@ -201,13 +214,14 @@
               (do (server/node-free verb)
                   (doseq [d drones] (server/node-free d))
                   (server/server-quit server)
+                  (release-handle! h)
                   (println :thursday-stopped))
               (println :thursday-stopped :already :halted))
             (catch Throwable t
               (println :thursday-stop-failed (.getName (class t)) (ex-message t)))
             (finally
               (release-stopping! server))))
-        :stopping)))
+        :stopping))))
 
 (defn halt!
   "Stop Thursday immediately (Overtone-stop semantics): drop all pattern
@@ -215,10 +229,14 @@
    Synchronous and fast (no sleeps); returns :halted. Overrides a fade
    in flight - the fade then wakes, sees the server down, and stands
    down. For the musical 10s fade, use stop!."
-  [{:keys [server clock verb drones]}]
-  (cond
-    (nil? server)
+  [h]
+  (let [{:keys [server clock verb drones]} (resolve-handle h)]
+   (cond
+    (nil? h)
     (do (println :thursday-halt-skipped :reason :no-server)
+        :already-stopped)
+    (nil? server)
+    (do (println :thursday-halt-skipped :reason :unknown-handle)
         :already-stopped)
     (not (server/boot? server))
     (do (println :thursday-halt-skipped :reason :not-booted)
@@ -230,10 +248,11 @@
           (server/node-free verb)
           (doseq [d drones] (server/node-free d))
           (server/server-quit server)
+          (release-handle! h)
           (println :thursday-halted)
           :halted
           (catch Throwable t
-            (println :thursday-halt-failed (.getName (class t)) (ex-message t)))))))
+            (println :thursday-halt-failed (.getName (class t)) (ex-message t))))))))
 
 (defn- live-main [secs]
   (let [s (server/make-external-server "thursday" :port 57176)
