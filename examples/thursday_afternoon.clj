@@ -134,6 +134,7 @@
     (let [verb (sdef/synth s :thursday-verb :inbus 16)
           drones (start-drones! s)]
       (play-all! clock)
+      (println :thursday-started :port port :tasks (count @(:tasks clock)))
       {:server s :clock clock :verb verb :drones drones})))
 
 (defn stop!
@@ -143,13 +144,17 @@
    a second call returns :already-stopped. Returns :done."
   [{:keys [server clock verb drones]}]
   (if-not (and server (server/boot? server))
-    :already-stopped
-    (do (server/ctrl verb :gate 0)
+    (do (println :thursday-stop-skipped :reason (if server :not-booted :no-server))
+        :already-stopped)
+    (do (println :thursday-stopping :tasks (count @(:tasks clock)))
+        (server/ctrl verb :gate 0)
         (Thread/sleep 11000)
         (stop-all! clock)
+        (println :thursday-tasks-stopped)
         (server/node-free verb)
         (doseq [d drones] (server/node-free d))
         (server/server-quit server)
+        (println :thursday-stopped)
         :done)))
 
 (defn- live-main [secs]
