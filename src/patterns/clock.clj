@@ -285,6 +285,35 @@
     (println :panic-tasks-dropped n)
     nil))
 
+(defn halt!
+  "Stop everything sounding through CLOCK right now and quit its server:
+   drop all pattern tasks (no new notes), panic! the server (clear
+   language-side schedulers, /clearSched, /g_deepFree - tails do not ring
+   out), then server-quit. Synchronous, no fade. Returns :halted. Throws
+   on failure - REPL helpers that must not throw catch and report.
+   Only reaches CLOCK's own server; servers this process doesn't track
+   (other JVMs, lost handles) need server/panic-all! (stays booted) or
+   killall scsynth."
+  [clock]
+  (cond
+    (nil? clock)
+    (do (println :halt-skipped :reason :no-clock)
+        :already-stopped)
+    (nil? @(:server clock))
+    (do (println :halt-skipped :reason :no-server)
+        :already-stopped)
+    (not (server/boot? @(:server clock)))
+    (do (println :halt-skipped :reason :not-booted)
+        :already-stopped)
+    :else
+    (let [s @(:server clock)]
+      (println :halting (:name s))
+      (stop clock :all)
+      (server/panic! s)
+      (server/server-quit s)
+      (println :halted (:name s))
+      :halted)))
+
 (defn end
   "End TASK (or tasks playing pdef keyword X) on CLOCK: finish the
    current cycle without looping (sets loop? false). Returns the

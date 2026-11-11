@@ -217,7 +217,7 @@
    in flight - the fade then wakes, sees the server down, and stands
    down. For the musical 10s fade, use stop!."
   [h]
-  (let [{:keys [server clock verb drones]} (resolve-handle h)]
+  (let [{:keys [server clock]} (resolve-handle h)]
    (cond
     (nil? h)
     (do (println :thursday-halt-skipped :reason :no-server)
@@ -229,17 +229,12 @@
     (do (println :thursday-halt-skipped :reason :not-booted)
         :already-stopped)
     :else
-    (do (println :thursday-halting)
-        (try
-          (stop-all! clock)
-          (server/node-free verb)
-          (doseq [d drones] (server/node-free d))
-          (server/server-quit server)
-          (handle/release! h)
-          (println :thursday-halted)
-          :halted
-          (catch Throwable t
-            (println :thursday-halt-failed (.getName (class t)) (ex-message t))))))))
+    (try
+      (let [r (p/halt! clock)]
+        (handle/release! h)
+        r)
+      (catch Throwable t
+        (println :thursday-halt-failed (.getName (class t)) (ex-message t)))))))
 
 (defn- live-main [secs]
   (let [s (server/make-external-server "thursday" :port 57176)
