@@ -137,25 +137,59 @@
       (println :thursday-started :port port :tasks (count @(:tasks clock)))
       {:server s :clock clock :verb verb :drones drones})))
 
+(defonce ^:private stopping! (atom []))
+;; Servers with a fade-out in flight (identity-compared). The fade runs on
+;; a background thread so stop! never parks the calling REPL session thread;
+;; on JDK 21 nREPL cannot interrupt a parked eval (Thread.stop throws UOE),
+;; so parking the session thread wedges every later eval behind it.
+(defn- claim-stopping! [server]
+  (let [[old _] (swap-vals! stopping!
+                   (fn [v]
+                     (if (some #(identical? % server) v) v (conj v server))))]
+    (not (some #(identical? % server) old))))
+
+(defn- release-stopping! [server]
+  (swap! stopping! (fn [v] (vec (remove #(identical? % server) v))))
+  nil)
+
 (defn stop!
-  "Fade Thursday out from handle H (same thread as start!, or any other):
-   gates the verb (10s release) under which everything else goes quiet,
-   stops all tasks, frees verb and drones, quits the server. Idempotent:
-   a second call returns :already-stopped. Returns :done."
+  "Fade Thursday out from handle H, without blocking the caller: gates
+   the verb (10s release) under which everything else goes quiet, stops
+   all tasks, frees verb and drones, quits the server. The fade runs on a
+   background thread; stop! itself returns :stopping immediately (a second
+   call while the fade is in flight returns :already-stopping, and once
+   the server is down calls return :already-stopped). Phases print as
+   they happen (:thursday-stopping ... :thursday-tasks-stopped
+   :thursday-stopped); a failure prints :thursday-stop-failed and releases
+   the claim so a retry is possible. Returns :stopping."
   [{:keys [server clock verb drones]}]
-  (if-not (and server (server/boot? server))
-    (do (println :thursday-stop-skipped :reason (if server :not-booted :no-server))
+  (cond
+    (nil? server)
+    (do (println :thursday-stop-skipped :reason :no-server)
         :already-stopped)
+    (not (server/boot? server))
+    (do (println :thursday-stop-skipped :reason :not-booted)
+        :already-stopped)
+    (not (claim-stopping! server))
+    (do (println :thursday-stop-skipped :reason :already-stopping)
+        :already-stopping)
+    :else
     (do (println :thursday-stopping :tasks (count @(:tasks clock)))
-        (server/ctrl verb :gate 0)
-        (Thread/sleep 11000)
-        (stop-all! clock)
-        (println :thursday-tasks-stopped)
-        (server/node-free verb)
-        (doseq [d drones] (server/node-free d))
-        (server/server-quit server)
-        (println :thursday-stopped)
-        :done)))
+        (future
+          (try
+            (server/ctrl verb :gate 0)
+            (Thread/sleep 11000)
+            (stop-all! clock)
+            (println :thursday-tasks-stopped)
+            (server/node-free verb)
+            (doseq [d drones] (server/node-free d))
+            (server/server-quit server)
+            (println :thursday-stopped)
+            (catch Throwable t
+              (println :thursday-stop-failed (.getName (class t)) (ex-message t)))
+            (finally
+              (release-stopping! server))))
+        :stopping)))
 
 (defn- live-main [secs]
   (let [s (server/make-external-server "thursday" :port 57176)
