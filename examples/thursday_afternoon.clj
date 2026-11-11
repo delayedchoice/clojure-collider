@@ -2,9 +2,9 @@
 ;; over a G-triard drone. Run: clojure -M -m thursday-afternoon [seconds=300]
 ;; Bounce: clojure -M -m thursday-afternoon bounce [seconds] [out.aiff]
 ;; Silence: clojure -M -m thursday-afternoon silence (kills every local
-;; scsynth, no REPL state needed - for when stop/panic can't reach it)
-;; REPL: (def h (thursday-afternoon/start!)) ... (thursday-afternoon/stop! h)
-;; for the 10s musical fade, (thursday-afternoon/halt! h) to stop at once.
+;; scsynth, no REPL state needed - for when p/halt! can't reach it)
+;; REPL: (def h (thursday-afternoon/start!)) ... (p/halt! h) to stop
+;; everything now (p/halt! takes what start! returns).
 ;;
 ;; After https://reverbmachine.com/blog/deconstructing-brian-eno-thursday-afternoon/
 ;; Harmonically everything belongs to a G dominant 7th (G B D F) with an
@@ -117,24 +117,15 @@
 
 (defn- play-all! [clock]
   (doseq [[nm _ _ _] loops] (p/play clock nm)))
-
 (defn- stop-all! [clock]
   (p/stop clock :all))
-;; Handles are clojure-collider.handle ids (see that ns): returning one is
-;; always tiny, and resolving accepts old full-map handles too, so handles
-;; captured before the registry change keep working.
-(defn- resolve-handle [h]
-  (if (:server h) h (handle/resolve-handle h)))
-
 
 (defn start!
   "Non-blocking Thursday for REPL use: boots scsynth, defines voices and
    sequences, starts the 15 loops and the drone. Returns an opaque
-   ThursdayHandle - pass it whole to stop!/halt!. The parts live in a
-   registry, so the value itself default-prints tiny and can never wedge
-   the REPL no matter how the value is delivered. No dynamic state is
-   needed to stop from any thread. Keep in step with live-main
-   (same fade shape)."
+   handle - pass it whole to p/halt! to stop everything now. The parts
+   live in a registry, so the value itself default-prints tiny and can
+   never wedge the REPL no matter how the value is delivered."
   [& {:keys [port] :or {port 57176}}]
   (let [s (server/make-external-server "thursday" :port port)
         clock (p/start-clock-loop :tempo 60)]
@@ -146,95 +137,6 @@
       (play-all! clock)
       (println :thursday-started :port port :tasks (count @(:tasks clock)))
       (handle/register! {:server s :clock clock :verb verb :drones drones}))))
-
-(defonce ^:private stopping! (atom []))
-;; Servers with a fade-out in flight (identity-compared). The fade runs on
-;; a background thread so stop! never parks the calling REPL session thread;
-;; on JDK 21 nREPL cannot interrupt a parked eval (Thread.stop throws UOE),
-;; so parking the session thread wedges every later eval behind it.
-(defn- claim-stopping! [server]
-  (let [[old _] (swap-vals! stopping!
-                   (fn [v]
-                     (if (some #(identical? % server) v) v (conj v server))))]
-    (not (some #(identical? % server) old))))
-
-(defn- release-stopping! [server]
-  (swap! stopping! (fn [v] (vec (remove #(identical? % server) v))))
-  nil)
-
-(defn stop!
-  "Fade Thursday out from handle H, without blocking the caller: gates
-   the verb (10s release) under which everything else goes quiet, stops
-   all tasks, frees verb and drones, quits the server. The fade runs on a
-   background thread; stop! itself returns :stopping immediately (a second
-   call while the fade is in flight returns :already-stopping, and once
-   the server is down calls return :already-stopped). Phases print as
-   they happen (:thursday-stopping ... :thursday-tasks-stopped
-   :thursday-stopped); a failure prints :thursday-stop-failed and releases
-   the claim so a retry is possible. Returns :stopping."
-  [h]
-  (let [{:keys [server clock verb drones]} (resolve-handle h)]
-   (cond
-    (nil? h)
-    (do (println :thursday-stop-skipped :reason :no-server)
-        :already-stopped)
-    (nil? server)
-    (do (println :thursday-stop-skipped :reason :unknown-handle)
-        :already-stopped)
-    (not (server/boot? server))
-    (do (println :thursday-stop-skipped :reason :not-booted)
-        :already-stopped)
-    (not (claim-stopping! server))
-    (do (println :thursday-stop-skipped :reason :already-stopping)
-        :already-stopping)
-    :else
-    (do (println :thursday-stopping :tasks (count @(:tasks clock)))
-        (future
-          (try
-            (server/ctrl verb :gate 0)
-            (Thread/sleep 11000)
-            (stop-all! clock)
-            (println :thursday-tasks-stopped)
-            ;; A halt! may have torn everything down while the fade slept;
-            ;; that is the expected override, not a failure.
-            (if (server/boot? server)
-              (do (server/node-free verb)
-                  (doseq [d drones] (server/node-free d))
-                  (server/server-quit server)
-                  (handle/release! h)
-                  (println :thursday-stopped))
-              (println :thursday-stopped :already :halted))
-            (catch Throwable t
-              (println :thursday-stop-failed (.getName (class t)) (ex-message t)))
-            (finally
-              (release-stopping! server))))
-        :stopping))))
-
-(defn halt!
-  "Stop Thursday immediately (Overtone-stop semantics): drop all pattern
-   tasks, free verb and drones now with no fade, quit the server.
-   Synchronous and fast (no sleeps); returns :halted. Overrides a fade
-   in flight - the fade then wakes, sees the server down, and stands
-   down. For the musical 10s fade, use stop!."
-  [h]
-  (let [{:keys [server clock]} (resolve-handle h)]
-   (cond
-    (nil? h)
-    (do (println :thursday-halt-skipped :reason :no-server)
-        :already-stopped)
-    (nil? server)
-    (do (println :thursday-halt-skipped :reason :unknown-handle)
-        :already-stopped)
-    (not (server/boot? server))
-    (do (println :thursday-halt-skipped :reason :not-booted)
-        :already-stopped)
-    :else
-    (try
-      (let [r (p/halt! clock)]
-        (handle/release! h)
-        r)
-      (catch Throwable t
-        (println :thursday-halt-failed (.getName (class t)) (ex-message t)))))))
 
 (defn- live-main [secs]
   (let [s (server/make-external-server "thursday" :port 57176)

@@ -11,6 +11,7 @@
             [patterns.patterns :as p]
             [patterns.pbind :as pbind]
             [patterns.backend :as backend]
+            [clojure-collider.handle :as handle]
             [clojure-collider.server.scheduler :as sched]
             [clojure-collider.server.server :as server]
             [clojure-collider.server.options :as opts]))
@@ -285,23 +286,39 @@
     (println :panic-tasks-dropped n)
     nil))
 
+(defn- as-clock
+  "Normalize halt!'s argument to a clock or nil: a clock passes through
+   (server must be an atom), a library Handle resolves via its registry
+   to the parts map's :clock, a parts map contributes its :clock.
+   Anything else is nil, so misuse skips instead of NPEing."
+  [x]
+  (cond
+    (nil? x) nil
+    (instance? clojure_collider.handle.Handle x) (:clock (handle/resolve-handle x))
+    (and (map? x) (contains? x :clock)) (:clock x)
+    (and (map? x) (instance? clojure.lang.Atom (:server x))) x
+    :else nil))
+
 (defn halt!
-  "Stop everything sounding through CLOCK right now and quit its server:
-   drop all pattern tasks (no new notes), panic! the server (clear
-   language-side schedulers, /clearSched, /g_deepFree - tails do not ring
-   out), then server-quit. Synchronous, no fade. Returns :halted. Throws
-   on failure - REPL helpers that must not throw catch and report.
-   Only reaches CLOCK's own server; servers this process doesn't track
+  "Stop everything sounding right now and quit its server: drop all
+   pattern tasks (no new notes), panic! the server (clear language-side
+   schedulers, /clearSched, /g_deepFree - tails do not ring out), then
+   server-quit. Synchronous, no fade. Returns :halted. Throws on teardown
+   failure - REPL helpers that must not throw catch and report. Accepts
+   a clock or anything resolving to one (library Handle, parts map with
+   :clock) - symmetric with start! fns that return handles. Only reaches
+   the resolved clock's own server; servers this process doesn't track
    (other JVMs, lost handles) need server/panic-all! (stays booted) or
    killall scsynth."
-  [clock]
-  ;; Bind before touching: (:server clock) may be missing (a handle, not a
-  ;; clock) or a stale record; deref blindly NPEs instead of skipping.
-  (let [srv (:server clock)
+  [clock-or-handle]
+  ;; Bind before touching: the argument may be a handle, a stale map, or
+  ;; garbage; deref blindly NPEs instead of skipping.
+  (let [c (as-clock clock-or-handle)
+        srv (when (map? c) (:server c))
         s (when (instance? clojure.lang.Atom srv) @srv)]
    (cond
-    (nil? clock)
-    (do (println :halt-skipped :reason :no-clock)
+    (nil? c)
+    (do (println :halt-skipped :reason :no-clock-or-handle)
         :already-stopped)
     (nil? s)
     (do (println :halt-skipped :reason :no-server)
@@ -311,9 +328,10 @@
         :already-stopped)
     :else
     (do (println :halting (:name s))
-        (stop clock :all)
+        (stop c :all)
         (server/panic! s)
         (server/server-quit s)
+        (handle/release! clock-or-handle)
         (println :halted (:name s))
         :halted))))
 

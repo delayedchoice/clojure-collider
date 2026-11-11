@@ -3,6 +3,7 @@
    go silent, tasks drop, server quits. Boots a real scsynth (like
    transmit-test's live server); skips when scsynth can't boot."
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure-collider.handle :as handle]
             [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [patterns.clock :as clock]
@@ -35,3 +36,21 @@
         (is (not (server/boot? s))))
       (finally
         (when (server/boot? s) (server/server-quit s))))))
+
+(deftest halt-accepts-handles-and-parts-maps
+  (testing "library handle and legacy full map both resolve (start!/halt! symmetry)"
+    (when-let [[s c] (try-rig 57196)]
+      (try
+        (let [h (handle/register! {:server s :clock c})]
+          (is (= :halted (clock/halt! h)))
+          (is (not (server/boot? s)))
+          (handle/release! h))
+        (finally
+          (when (server/boot? s) (server/server-quit s)))))
+    (when-let [[s c] (try-rig 57194)]
+      (try
+        (testing "legacy full map works without a registry entry"
+          (is (= :halted (clock/halt! {:server s :clock c})))
+          (is (not (server/boot? s))))
+        (finally
+          (when (server/boot? s) (server/server-quit s)))))))
