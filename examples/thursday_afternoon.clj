@@ -119,13 +119,26 @@
 
 (defn- stop-all! [clock]
   (p/stop clock :all))
+(defrecord ThursdayHandle [server clock verb drones])
+;; The handle owns pattern streams and scheduler queues; the default
+;; record printer dumps all of it (tens of KB, single line) as every eval
+;; value. Terminal REPLs stream that fine, but nREPL+Conjure must render
+;; the whole value before the session serves the next eval - a stuck
+;; looking session after an otherwise healthy start!. Print one line.
+(defmethod print-method ThursdayHandle [h ^java.io.Writer w]
+  (.write w (str "#thursday[" (get-in h [:server :name]) " "
+                 (if (try (server/boot? (:server h)) (catch Throwable _ false))
+                   "up" "down") "]")))
+
 
 (defn start!
   "Non-blocking Thursday for REPL use: boots scsynth, defines voices and
-   sequences, starts the 15 loops and the drone. Returns a handle
-   {:server s :verb v :drones [...]} for stop!. The handle carries the
-   server record and the clock map, so no dynamic state is needed to
-   stop from any thread. Keep in step with live-main (same fade shape)."
+   sequences, starts the 15 loops and the drone. Returns a ThursdayHandle
+   (destructures as {:server :clock :verb :drones}) for stop!/halt!.
+   The handle carries the server record and the clock map, so no dynamic
+   state is needed to stop from any thread. Prints as one line so eval
+   values never dump megabytes into the REPL. Keep in step with live-main
+   (same fade shape)."
   [& {:keys [port] :or {port 57176}}]
   (let [s (server/make-external-server "thursday" :port port)
         clock (p/start-clock-loop :tempo 60)]
@@ -136,7 +149,7 @@
           drones (start-drones! s)]
       (play-all! clock)
       (println :thursday-started :port port :tasks (count @(:tasks clock)))
-      {:server s :clock clock :verb verb :drones drones})))
+      (->ThursdayHandle s clock verb drones))))
 
 (defonce ^:private stopping! (atom []))
 ;; Servers with a fade-out in flight (identity-compared). The fade runs on
