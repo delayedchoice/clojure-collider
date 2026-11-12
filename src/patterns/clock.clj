@@ -165,6 +165,15 @@
         (throw (ex-info (str "play: no pdef named " x) {:name x})))
     x))
 
+(defn- task-named?
+  "True when TASK plays the pdef registered under NM: by the name
+   remembered at play time, or by source equality with the current
+   registration. The name check covers the window between a re-pdef
+   and the task's next step (when refresh swaps the source)."
+  [task nm]
+  (or (= (:source-name task) nm)
+      (try (= (:source task) (resolve-source nm))
+           (catch clojure.lang.ExceptionInfo _ false))))
 (defn- remove-task!
   [clock task]
   (swap! (:tasks clock) (fn [ts] (vec (remove #(= (:id %) (:id task)) ts))))
@@ -284,11 +293,10 @@
 (defn playing-p
   "True when TASK (or the task playing pdef keyword) is on CLOCK."
   [clock x]
-  (let [ts @(:tasks clock)]
+   (let [ts @(:tasks clock)]
     (boolean
      (if (keyword? x)
-       (let [src (try (resolve-source x) (catch clojure.lang.ExceptionInfo _ ::missing))]
-         (some #(= (:source %) src) ts))
+       (some #(task-named? % x) ts)
        (some #(or (= (:id %) (:id x)) (= % x)) ts)))))
 
 (defn stop
@@ -300,10 +308,10 @@
     (do (reset! (:tasks clock) []) nil)
 
     (keyword? x)
-    (let [src (resolve-source x)]
-      (swap! (:tasks clock)
-             (fn [ts] (vec (remove #(= (:source %) src) ts))))
-      nil)
+    (do (resolve-source x) ; throws on unknown pdef, as before
+        (swap! (:tasks clock)
+               (fn [ts] (vec (remove #(task-named? % x) ts))))
+        nil)
 
     :else
     (remove-task! clock x)))
@@ -375,14 +383,14 @@
    updated task, or nil."
   [clock x]
   (if (keyword? x)
-    (let [src (resolve-source x)]
-      (swap! (:tasks clock)
-             (fn [ts] (mapv (fn [t]
-                              (if (= (:source t) src)
-                                (do (reset! (:loop? t) false) t)
-                                t))
-                            ts)))
-      nil)
+    (do (resolve-source x) ; throws on unknown pdef, as before
+        (swap! (:tasks clock)
+               (fn [ts] (mapv (fn [t]
+                                (if (task-named? t x)
+                                  (do (reset! (:loop? t) false) t)
+                                  t))
+                              ts)))
+        nil)
     (do (reset! (:loop? x) false) x)))
 
 (defn play-or-stop

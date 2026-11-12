@@ -26,7 +26,7 @@
         (is (true? (wait-for #(identical? (task-source clock)
                                                    (p/find-pdef :live-probe))
                                        2000))))
-      (testing "re-pdef swaps the running source, no restart"
+      (testing "re-pdef swaps the running task's :source without restarts"
         (p/pdef :live-probe (p/pbind :x 2 :dur 0.2))
         (is (= 1 (count @(:tasks clock))))
         (is (true? (wait-for #(identical? (task-source clock)
@@ -60,3 +60,18 @@
         (is (true? (wait-for #(empty? @(:tasks clock)) 4000))))
       (finally
         (clock/stop clock :all)))))
+
+(deftest keyword-ops-find-task-mid-update
+  (testing "re-pdef then end/stop/playing-p before the next step still hits"
+    (let [clock (clock/start-clock-loop :tempo 60)]
+      (try
+        (p/pdef :live-mid (p/pbind :x 1 :dur 30))
+        (clock/play clock :live-mid)
+        (p/pdef :live-mid (p/pbind :x 2 :dur 30))
+        (is (true? (clock/playing-p clock :live-mid)))
+        (clock/end clock :live-mid)
+        (is (false? @(:loop? (first @(:tasks clock)))))
+        (clock/stop clock :live-mid)
+        (is (empty? @(:tasks clock)))
+        (finally
+          (clock/stop clock :all))))))
