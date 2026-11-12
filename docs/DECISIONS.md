@@ -7,13 +7,17 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
+### 2026-11-12 — handles are plain maps again, registry removed
+- The `handle` registry was maximal caution for a problem better fixed at the root: the clock is now a `defrecord` with a one-line print-method (`#clock[tasks 15]`), matching the existing server/node printers, so plain `{:server :clock ...}` maps print tiny with nothing to go stale. `p/halt!` takes a clock or a parts map with `:clock`; `start!` fns return the map, callers pass it back - no ids, no lifecycle, no extra global. `clojure-collider.handle` deleted.
+- Status: decided
+
 ### 2026-11-12 — live patterns re-resolve every step
 - Tasks remember their pdef name and re-resolve it on every step: a re-pdef takes effect at the next event without stop/play, even for streams that never end (Thursday's loops are infinite). A withdrawn name keeps the old stream (stopping stays explicit); a looping finite pattern restarts while registered and ends once withdrawn. `redefine-sequences!` is now just re-pdef + play-new + stop-removed.
 - Status: decided
 
 
 ### 2026-11-11 — `patterns.clock/halt!` immediate full stop in the library
-- Stopping all sound is now only `p/halt!`: drop clock tasks, `server/panic!` (clear schedulers, /clearSched, /g_deepFree), `server-quit`. Synchronous, no fade, returns `:halted`, throws on failure (REPL helpers catch). Accepts a clock, a library Handle, or a parts map with `:clock` - symmetric with `start!` fns that return handles. The example-level `stop!`/`halt!` were removed. `p/panic!` stays the no-quit global; orphans outside the process still need `killall scsynth`.
+- Stopping all sound is now only `p/halt!`: drop clock tasks, `server/panic!` (clear schedulers, /clearSched, /g_deepFree), `server-quit`. Synchronous, no fade, returns `:halted`, throws on failure (REPL helpers catch). Accepts a clock or a parts map with `:clock` - symmetric with `start!` fns that return `{:server :clock ...}`. The example-level `stop!`/`halt!` were removed. `p/panic!` stays the no-quit global; orphans outside the process still need `killall scsynth`.
 - Status: decided
 
 ### 2026-11-11 — `clojure-collider.handle` id-handles for REPL use

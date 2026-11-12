@@ -15,8 +15,7 @@
 ;; range) with +-0.6s jitter per repeat,stand-ins documented as such.
 ;; The clock runs at 60bpm so pattern beats ARE seconds.
 (ns thursday-afternoon
-  (:require [clojure-collider.handle :as handle]
-            [clojure-collider.server.server :as server]
+  (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [ugens :as ug]
@@ -138,10 +137,8 @@
    Returns {:redefined n :started m :stopped-stale k}, all small. REPL flow:
    (def loops (assoc-in loops [0 2] 72)) ; sine1 plays G5 from next cycle
    (thursday-afternoon/redefine-sequences! h)"
-  [h]
-  (let [parts (if (:server h) h (handle/resolve-handle h))
-        {:keys [server clock]} parts
-        names (mapv first loops)
+  [{:keys [server clock]}]
+  (let [names (mapv first loops)
         new-set (set names)
         managed @live-loops
         stale (remove new-set managed)
@@ -158,10 +155,10 @@
 
 (defn start!
   "Non-blocking Thursday for REPL use: boots scsynth, defines voices and
-   sequences, starts the 15 loops and the drone. Returns an opaque
-   handle - pass it whole to p/halt! to stop everything now. The parts
-   live in a registry, so the value itself default-prints tiny and can
-   never wedge the REPL no matter how the value is delivered."
+   sequences, starts the 15 loops and the drone. Returns {:server :clock
+   :verb :drones} - pass it whole to p/halt! to stop everything now.
+   Server, clock, verb and drone nodes all print tiny, so the value can
+   never wedge the REPL no matter how it is delivered."
   [& {:keys [port] :or {port 57176}}]
   (let [s (server/make-external-server "thursday" :port port)
         clock (p/start-clock-loop :tempo 60)]
@@ -172,7 +169,7 @@
           drones (start-drones! s)]
       (play-all! clock)
       (println :thursday-started :port port :tasks (count @(:tasks clock)))
-      (handle/register! {:server s :clock clock :verb verb :drones drones}))))
+      {:server s :clock clock :verb verb :drones drones})))
 
 (defn- live-main [secs]
   (let [s (server/make-external-server "thursday" :port 57176)

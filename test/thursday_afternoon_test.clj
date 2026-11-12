@@ -3,7 +3,6 @@
    `loops`, redefine, and only the remaining loops play; restore and all
    15 play again. Boots a real scsynth; skips when it can't boot."
   (:require [clojure.test :refer [deftest is testing]]
-            [clojure-collider.handle :as handle]
             [pattern :as p]
             [thursday-afternoon :as th]))
 
@@ -13,7 +12,7 @@
     (catch Exception e (println "SKIP redefine:" (.getMessage e)) nil)))
 
 (defn- task-count [h]
-  (count @(:tasks (:clock (handle/resolve-handle h)))))
+  (count @(:tasks (:clock h))))
 
 (deftest redefine-sequences-takes-effect-live
   (when-let [h (try-start 57193)]

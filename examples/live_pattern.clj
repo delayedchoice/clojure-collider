@@ -7,16 +7,15 @@
 ;;   (p/pdef :live-line (p/pbind :instrument :live-blip :midinote 79 :dur 0.5))
 ;;   (p/halt! h)
 (ns live-pattern
-  (:require [clojure-collider.handle :as handle]
-            [clojure-collider.server.server :as server]
+  (:require [clojure-collider.server.server :as server]
             [clojure-collider.synth.sdef :as sdef]
             [clojure-collider.synth.operators :as ops]
             [pattern :as p]
             [ugens :as ug]))
 
 (defn start!
-  "Boot, define one blip voice, start one looping line. Returns a handle
-   for p/halt!."
+  "Boot, define one blip voice, start one looping line. Returns
+   {:server :clock} - pass it whole to p/halt!."
   [& {:keys [port] :or {port 57198}}]
   (let [s (server/make-external-server "live-pattern" :port port)
         clock (p/start-clock-loop :tempo 60)]
@@ -27,7 +26,7 @@
     (p/pdef :live-line
       (p/pbind :instrument :live-blip :midinote 60 :dur 0.5))
     (p/play clock :live-line)
-    (handle/register! {:server s :clock clock})))
+    {:server s :clock clock}))
 
 (defn -main [& _]
   (let [h (start!)]

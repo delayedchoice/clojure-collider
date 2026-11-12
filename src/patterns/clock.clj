@@ -11,23 +11,30 @@
             [patterns.patterns :as p]
             [patterns.pbind :as pbind]
             [patterns.backend :as backend]
-            [clojure-collider.handle :as handle]
             [clojure-collider.server.scheduler :as sched]
             [clojure-collider.server.server :as server]
             [clojure-collider.server.options :as opts]))
+;; -- clock ---------------------------------------------------------------------
 
-;; -- clock --------------------------------------------------------------------
+(defrecord Clock [tempo-clock tasks enabled-backends server])
+;; The tasks atom holds pattern streams; default printing would dump them
+;; as tens of KB per eval value and wedge nREPL clients. Print one line.
+;; (Counterpart to the cycle-safe print-methods on server/node records.)
+(defmethod print-method Clock [c ^java.io.Writer w]
+  (.write w (str "#clock[tasks "
+                 (try (count @(:tasks c)) (catch Throwable _ "?"))
+                 "]")))
 
 (defn make-clock
-  "Make a clock map with an empty task list and no backends.
+  "Make a clock with an empty task list and no backends.
    TEMPO-CLOCK is a scheduler/TempoClock (or nil for untimed use).
    :server holds the clock's sounding server (or nil when serverless)."
   ([] (make-clock nil))
   ([tempo-clock]
-   {:tempo-clock tempo-clock
-    :tasks (atom [])
-    :enabled-backends (atom [])
-    :server (atom nil)}))
+   (map->Clock {:tempo-clock tempo-clock
+                :tasks (atom [])
+                :enabled-backends (atom [])
+                :server (atom nil)})))
 
 (defn start-clock-loop
   "Start a fresh pattern clock at TEMPO BPM (default 60, i.e. upstream
@@ -316,16 +323,16 @@
     nil))
 
 (defn- as-clock
-  "Normalize halt!'s argument to a clock or nil: a clock passes through
-   (server must be an atom), a library Handle resolves via its registry
-   to the parts map's :clock, a parts map contributes its :clock.
+  "Normalize halt!'s argument to a clock or nil: a clock (server and
+   tasks both atoms) passes through, a parts map contributes its :clock.
    Anything else is nil, so misuse skips instead of NPEing."
   [x]
   (cond
     (nil? x) nil
-    (instance? clojure_collider.handle.Handle x) (:clock (handle/resolve-handle x))
     (and (map? x) (contains? x :clock)) (:clock x)
-    (and (map? x) (instance? clojure.lang.Atom (:server x))) x
+    (and (map? x)
+          (instance? clojure.lang.Atom (:server x))
+          (instance? clojure.lang.Atom (:tasks x))) x
     :else nil))
 
 (defn halt!
@@ -334,20 +341,19 @@
    schedulers, /clearSched, /g_deepFree - tails do not ring out), then
    server-quit. Synchronous, no fade. Returns :halted. Throws on teardown
    failure - REPL helpers that must not throw catch and report. Accepts
-   a clock or anything resolving to one (library Handle, parts map with
-   :clock) - symmetric with start! fns that return handles. Only reaches
-   the resolved clock's own server; servers this process doesn't track
-   (other JVMs, lost handles) need server/panic-all! (stays booted) or
-   killall scsynth."
-  [clock-or-handle]
-  ;; Bind before touching: the argument may be a handle, a stale map, or
-  ;; garbage; deref blindly NPEs instead of skipping.
-  (let [c (as-clock clock-or-handle)
+   a clock or a parts map with :clock - symmetric with start! fns that
+   return {:server :clock ...}. Only reaches the resolved clock's own
+   server; servers this process doesn't track (other JVMs, lost rigs)
+   need server/panic-all! (stays booted) or killall scsynth."
+  [clock-or-parts]
+  ;; Bind before touching: the argument may be a stale map or garbage;
+  ;; deref blindly NPEs instead of skipping.
+  (let [c (as-clock clock-or-parts)
         srv (when (map? c) (:server c))
         s (when (instance? clojure.lang.Atom srv) @srv)]
    (cond
     (nil? c)
-    (do (println :halt-skipped :reason :no-clock-or-handle)
+    (do (println :halt-skipped :reason :no-clock-or-parts)
         :already-stopped)
     (nil? s)
     (do (println :halt-skipped :reason :no-server)
@@ -360,7 +366,6 @@
         (stop c :all)
         (server/panic! s)
         (server/server-quit s)
-        (handle/release! clock-or-handle)
         (println :halted (:name s))
         :halted))))
 
