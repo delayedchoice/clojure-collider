@@ -7,9 +7,10 @@ Record every non-trivial choice here. Newest on top.
 _(none — all initial decisions locked 2026-10-02)_
 
   ## Decided
-### 2026-11-11 — live loop edits via `redefine-sequences!`
-- Pattern tasks snapshot their stream at `play` time, so re-`pdef` alone never reaches running loops. `thursday-afternoon/redefine-sequences!` re-registers from the current `loops` var and stop/replays the managed set (tracked in `live-loops`, so removed loops actually stop instead of ringing on). Drones/voices untouched. Returns small counts map.
+### 2026-11-12 — live patterns re-resolve every step
+- Tasks remember their pdef name and re-resolve it on every step: a re-pdef takes effect at the next event without stop/play, even for streams that never end (Thursday's loops are infinite). A withdrawn name keeps the old stream (stopping stays explicit); a looping finite pattern restarts while registered and ends once withdrawn. `redefine-sequences!` is now just re-pdef + play-new + stop-removed.
 - Status: decided
+
 
 ### 2026-11-11 — `patterns.clock/halt!` immediate full stop in the library
 - Stopping all sound is now only `p/halt!`: drop clock tasks, `server/panic!` (clear schedulers, /clearSched, /g_deepFree), `server-quit`. Synchronous, no fade, returns `:halted`, throws on failure (REPL helpers catch). Accepts a clock, a library Handle, or a parts map with `:clock` - symmetric with `start!` fns that return handles. The example-level `stop!`/`halt!` were removed. `p/panic!` stays the no-quit global; orphans outside the process still need `killall scsynth`.

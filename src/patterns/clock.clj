@@ -1,7 +1,7 @@
 (ns patterns.clock
   "Clock + play/stop for patterns. Mirrors upstream clock.lisp (MVP slice):
    tasks scheduled on our TempoClock (server/scheduler.clj). A task is a map
-   {:id :source :stream :next-beat :loop?} (:next-beat/:loop? are atoms).
+   {:id :source :source-name :stream :next-beat :loop?} (:next-beat/:loop? are atoms).
    play pulls pnext! values; eop drops the task (or restarts its stream when
    looping); event maps go to every enabled backend via backend/play-event and
    the next step is scheduled at beat+delta. play-take is a synchronous,
@@ -179,21 +179,49 @@
        (remove-task! clock task)
       (step-body! clock task depth)))))
 
+(defn- refresh-source
+  "If TASK was played from a pdef name whose registered pattern changed
+   (identical? fails), rebuild its stream from the current pattern so
+   edits sound at the next step without stop/play - even for streams
+   that never end. A withdrawn name keeps the old stream (stopping is
+   explicit); the eop path below still ends a task with nothing to play.
+   Returns the (possibly updated) task."
+  [clock task]
+  (if-let [nm (:source-name task)]
+    (let [cur (pbind/find-pdef nm)]
+      (if (or (nil? cur) (identical? cur (:source task)))
+        task
+        (let [t (assoc task :source cur :stream (p/as-pstream cur))]
+          (swap! (:tasks clock)
+                 (fn [ts] (mapv (fn [t2]
+                                  (if (= (:id t2) (:id task)) t t2))
+                                ts)))
+          t)))
+    task))
+
 (defn- step-body!
   "Single pull/play/reschedule step (split for the depth guard above)."
   [clock task depth]
-  (let [stream (:stream task)
+  (let [task (refresh-source clock task)
+        stream (:stream task)
         v (p/pnext! stream)]
     (if (= v u/eop)
       (if @(:loop? task)
-        (let [fresh (p/as-pstream (:source task))]
-          (swap! (:tasks clock)
-                 (fn [ts] (mapv (fn [t]
-                                  (if (= (:id t) (:id task))
-                                    (assoc t :stream fresh)
-                                    t))
-                                ts)))
-          (step-task! clock (assoc task :stream fresh) (inc depth)))
+        ;; Live patterns: re-resolve by pdef name so a re-pdef takes effect
+        ;; at the next cycle boundary. A withdrawn name ends the task.
+        (let [src (if-let [nm (:source-name task)]
+                    (pbind/find-pdef nm)
+                    (:source task))]
+          (if (nil? src)
+            (remove-task! clock task)
+            (let [fresh (p/as-pstream src)]
+              (swap! (:tasks clock)
+                     (fn [ts] (mapv (fn [t]
+                                      (if (= (:id t) (:id task))
+                                        (assoc t :stream fresh :source src)
+                                        t))
+                                    ts)))
+              (step-task! clock (assoc task :stream fresh :source src) (inc depth)))))
         (remove-task! clock task))
        (let [event-map (if (map? v) v (ev/event :value v))
              beat @(:next-beat task)
@@ -231,6 +259,7 @@
                           (clock-beats clock))
         task {:id (swap! task-ids inc)
               :source source
+              :source-name (when (keyword? x) x)
               :stream stream
               :next-beat (atom (double start))
               :loop? (atom (boolean loop?))}]

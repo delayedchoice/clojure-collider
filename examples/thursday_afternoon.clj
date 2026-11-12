@@ -127,32 +127,34 @@
 
 (defn redefine-sequences!
   "Live-coding entry point: re-register loop patterns from the current
-   value of `loops` and restart the loop tasks so edits sound without
-   rebooting. Edit the `loops` vector (re-def it), then call this with
-   the start! handle: removed loops stop, the rest restart from their
-   cycle start, new loops start playing - afterwards exactly `loops`
-   is playing. Drones and voices are untouched (sequences only). If the
-   server is down it re-registers without touching tasks. Returns
-   {:redefined n :restarted m :stopped-stale k}, all small. REPL flow:
-   (def loops (assoc-in loops [0 2] 72)) ; sine1 plays G5 now
+   value of `loops`. Changed loops take effect by themselves at their
+   next step (tasks re-resolve their pdef every step, so no restart
+   interrupts them - even streams that never end); this starts loops
+   that were added and stops
+   tasks whose loops were removed. Loops you stopped by hand stay stopped
+   (p/play them to resume). Edit the `loops` vector (re-def it), then call
+   this with the start! handle. Drones and voices are untouched (sequences
+   only). If the server is down it re-registers without touching tasks.
+   Returns {:redefined n :started m :stopped-stale k}, all small. REPL flow:
+   (def loops (assoc-in loops [0 2] 72)) ; sine1 plays G5 from next cycle
    (thursday-afternoon/redefine-sequences! h)"
   [h]
   (let [parts (if (:server h) h (handle/resolve-handle h))
         {:keys [server clock]} parts
         names (mapv first loops)
         new-set (set names)
-        stale (remove new-set @live-loops)]
+        managed @live-loops
+        stale (remove new-set managed)
+        fresh (remove #(contains? managed %) names)]
     (define-sequences!)
     (if (and server (server/boot? server))
       (do (doseq [nm stale] (p/stop clock nm))
-          (doseq [[nm _ _ _] loops]
-            (p/stop clock nm)
-            (p/play clock nm))
+          (doseq [nm fresh] (p/play clock nm))
           (reset! live-loops new-set)
           {:redefined (count names)
-           :restarted (count names)
+           :started (count fresh)
            :stopped-stale (count stale)})
-      {:redefined (count names) :restarted 0 :stopped-stale 0})))
+      {:redefined (count names) :started 0 :stopped-stale 0})))
 
 (defn start!
   "Non-blocking Thursday for REPL use: boots scsynth, defines voices and

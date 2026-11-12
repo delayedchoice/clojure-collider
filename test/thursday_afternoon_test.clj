@@ -20,15 +20,22 @@
     (try
       (testing "all 15 loops play after start"
         (is (= 15 (task-count h))))
-      (testing "shrinking loops stops the removed ones"
+      (testing "shrinking loops stops the removed ones, survivors keep playing"
         (let [subset (vec (take 3 thursday-afternoon/loops))]
           (with-redefs [thursday-afternoon/loops subset]
             (let [r (th/redefine-sequences! h)]
-              (is (= {:redefined 3 :restarted 3 :stopped-stale 12} r))
+              (is (= {:redefined 3 :started 0 :stopped-stale 12} r))
+              (is (= 3 (task-count h)))))))
+      (testing "changed loops take effect without restarts"
+        (let [transposed (mapv (fn [[nm inst midi center]] [nm inst (+ midi 12) center])
+                               (take 3 thursday-afternoon/loops))]
+          (with-redefs [thursday-afternoon/loops transposed]
+            (let [r (th/redefine-sequences! h)]
+              (is (= {:redefined 3 :started 0 :stopped-stale 0} r))
               (is (= 3 (task-count h)))))))
       (testing "restoring loops brings all 15 back"
         (let [r (th/redefine-sequences! h)]
-          (is (= {:redefined 15 :restarted 15 :stopped-stale 0} r))
+          (is (= {:redefined 15 :started 12 :stopped-stale 0} r))
           (is (= 15 (task-count h)))))
       (finally
         (p/halt! h)))))
